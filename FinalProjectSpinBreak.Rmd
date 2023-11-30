@@ -1,0 +1,346 @@
+---
+title: "Final Project CS 2870"
+author: "Skyler Heininger, Andy English, Henry Kraessig"
+date: "11/29/2023"
+output: html_document
+---
+
+## Set up
+
+```{r setup, message = FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      fig.align = "center")
+pacman::p_load(rpart, rpart.plot, tidyverse, caret)
+
+theme_set(theme_bw())
+
+#  We will use the data cats, which is in the package, MASS 
+cats <- 
+  MASS::cats |> 
+  rename(heart_wt = Hwt,
+         body_wt = Bwt)
+
+```
+
+
+Load the data
+```{r load_csv}
+
+# Give this time to load, the 2018 pitches full dataset is large (slimmed down from before, but still large)
+pitches <- read.csv("2018_pitches_full.csv")
+
+```
+
+This RMD script will look specifically at the spin rate / break rate of the pitches. Let us first observe the spin rate categorized by the pitch type.
+
+```{r pitch types by spin rate}
+# Group by pitch_type and summarize spin_rate
+summary_stats <- pitches |>
+  group_by(pitch_type) |>
+  summarise(
+    count = n(),
+    mean = mean(spin_rate, na.rm=T),
+    min = min(spin_rate, na.rm = T),
+    Q1 = quantile(spin_rate, probs = 0.25, na.rm = T),
+    median = median(spin_rate, na.rm = T),
+    Q3 = quantile(spin_rate, probs = 0.75, na.rm = T),
+    max = max(spin_rate, na.rm = T)
+  )
+
+# Display the five-number summary for each pitch type
+print(summary_stats)
+
+# Notice the sizes of each pitch type category. Some are differing greatly
+
+# Plot these summaries using boxplot for ease of viewing
+ggplot(data = pitches, aes(x = spin_rate, y = pitch_type, fill = pitch_type)) +
+  geom_boxplot(show.legend = F) +
+  labs(x = "Spin Rate", y = "Pitch types", title="Spin Rate and break angle for Each Pitch Type")
+
+# There is a clear difference between the pitch types
+
+```
+
+
+```{r spin_rate}
+# calculate average spin for each pitch type
+average_spin <- pitches |>
+  group_by(pitch_type) |>
+  summarise(avg_spin = mean(spin_rate, na.rm = TRUE))
+
+
+# Plotting the average spin rate for each pitch type
+ggplot(data = average_spin, aes(x = pitch_type, y = avg_spin, fill = pitch_type)) +
+  geom_col(show.legend = F) +
+  labs(x = "Pitch Type", y = "Average Spin Rate", title = "Average Spin Rate for Each Pitch Type")
+
+
+
+
+```
+
+Next, let us analyze each spin rate compared to the direction
+
+```{r spin rate with direction}
+# calculate average spin for each pitch type
+average_spin_breaka <- pitches |>
+  group_by(pitch_type) |>
+  summarise(avg_spin = mean(spin_rate, na.rm = T),
+            avg_break = mean(break_angle, na.rm = T))
+
+# Plotting avg spin and break angle for each pitch type
+average_spin_breaka |>
+  ggplot(mapping = aes(x = avg_spin, y = avg_break, color = pitch_type)) +
+  geom_point()
+
+
+# Plotting the spin rate with break angle, by each pitch type
+ggplot(data = pitches, mapping = aes(x = spin_rate, y = break_angle, color = pitch_type)) +
+  geom_point() +
+  labs(x = "Spin Rate", y = "Break Angle",title = "Spin Rate and break angle for Each Pitch Type")
+
+
+# The same thing but using facets to view the data
+ggplot(data = pitches, mapping = aes(x = spin_rate, y = break_angle, color = pitch_type)) +
+  geom_point() +
+  facet_wrap(facets = ~pitch_type, scales = "free_y") +
+  labs(x = "Spin Rate", y = "Break Angle",title = "Spin Rate and break angle for Each Pitch Type")
+
+
+# Graph boxplot and violin plot of spin rate and break angle
+# Need to be in the same column to work
+pitches_long <- pivot_longer(pitches, cols = c(spin_rate, break_angle), names_to = "Variable", values_to = "Value")
+
+# Creating a combined plot of boxplot and violin plot for spin rate and break angle
+ggplot(pitches_long, aes(x = pitch_type, y = Value)) +
+  geom_boxplot(data = filter(pitches_long, Variable == "spin_rate"), width = 0.4, fill = "lightblue") +
+  geom_violin(data = filter(pitches_long, Variable == "break_angle"), width = 0.9, fill = "lightgreen", alpha = 0.7) +
+  facet_wrap(~ Variable, scales = "free_y", nrow = 2) +
+  labs(y = "Value", title="Comparison of Spin Rate and Break Angle by Pitch Type")
+
+
+
+```
+
+
+Additionally, the pfx_x and pfx_z are for horizontal and vertical movement over the course of the flight during last 40 feet before home plate, compared to a theoretical pitch with no horizontal movement
+
+```{r pfxx pfxz}
+
+# Plot these summaries using boxplot for ease of viewing
+ggplot(data = pitches, mapping = aes(x = pfx_x, y = pitch_type, fill = pitch_type)) +
+  geom_boxplot(show.legend = F) +
+  labs(x = "pfxx", y = "Pitch types", title = "Pfxx for Each Pitch Type")
+
+
+# Plot these summaries using boxplot for ease of viewing
+ggplot(data = pitches, mapping = aes(x = pfx_z, y = pitch_type, fill = pitch_type)) +
+  geom_boxplot(show.legend = F) +
+  labs(x = "pfxz", y = "Pitch types", title = "Pfxz for Each Pitch Type")
+
+# Get five number summaries for both
+summary_pfxx_stats <- pitches |>
+  group_by(pitch_type) |>
+  summarise(
+    count = n(),
+    mean = mean(pfx_x, na.rm=T),
+    min = min(pfx_x, na.rm = T),
+    Q1 = quantile(pfx_x, probs = 0.25, na.rm = T),
+    median = median(pfx_x, na.rm = T),
+    Q3 = quantile(pfx_x, probs = 0.75, na.rm = T),
+    max = max(pfx_x, na.rm = T)
+  )
+
+print(summary_pfxx_stats)
+
+summary_pfxz_stats <- pitches |>
+  group_by(pitch_type) |>
+  summarise(
+    count = n(),
+    mean = mean(pfx_z, na.rm=T),
+    min = min(pfx_z, na.rm = T),
+    Q1 = quantile(pfx_z, probs = 0.25, na.rm = T),
+    median = median(pfx_z, na.rm = T),
+    Q3 = quantile(pfx_z, probs = 0.75, na.rm = T),
+    max = max(pfx_z, na.rm = T)
+  )
+
+print(summary_pfxz_stats)
+
+
+# Also plot the spin rate vs pfxx and pfxz
+ggplot(data = pitches, mapping = aes(x = spin_rate, y = pfx_x, color = pitch_type)) +
+  geom_point() +
+  labs(x = "Spin Rate", y = "Lateral movement during pitch", title="Spin Rate and lateral movement for each Pitch Type")
+
+# facet wrap version
+ggplot(data = pitches, mapping = aes(x = spin_rate, y = pfx_x, color = pitch_type)) +
+  geom_point() +
+  facet_wrap(~ pitch_type) +
+  labs(x = "Spin Rate", y = "Lateral movement during pitch", title="Spin Rate and lateral movement for each Pitch Type")
+
+# pfzz
+ggplot(data = pitches, mapping = aes(x = spin_rate, y = pfx_z, color = pitch_type)) +
+  geom_point() +
+  labs(x = "Spin Rate", y = "Vertical movement during pitch", title="Spin Rate and vertical movement for each Pitch Type")
+
+# facet wrap version
+ggplot(data = pitches, mapping = aes(x = spin_rate, y = pfx_z, color = pitch_type)) +
+  geom_point() +
+  facet_wrap(~ pitch_type) +
+  labs(x = "Spin Rate", y = "Vertical movement during pitch", title="Spin Rate and vertical movement for each Pitch Type")
+
+
+```
+
+Now, we perform aov tests to determine statistical differences between groups for spin rate, break angle, pfxx and pfxz
+
+```{r aov}
+
+# Performing ANOVA for each variable
+anova_spin <- aov(spin_rate ~ pitch_type, data = pitches)
+anova_break <- aov(break_angle ~ pitch_type, data = pitches)
+anova_pfxx <- aov(pfx_x ~ pitch_type, data = pitches)
+anova_pfxz <- aov(pfx_z ~ pitch_type, data = pitches)
+
+# Summary of ANOVA results
+summary(anova_spin)
+summary(anova_break)
+summary(anova_pfxx)
+summary(anova_pfxz)
+
+
+```
+Considering these variables have some similarities, it makes sense that each of these are statistically significant based on the pitch type.
+
+
+
+```{r cleaning for final spin rate graphs}
+
+# Mutate FO to PO since they are the same, remove "" and AB since are an error or occur rarely
+pitches_spin_cleaned <- pitches |>
+  mutate(pitch_type = ifelse(pitch_type == "FO","PO", pitch_type)) |>
+  filter(!pitch_type %in% c("", "AB","EP"))
+
+# Plot basic ones relationships between spin rate and the other variables
+ggplot(data = pitches_spin_cleaned, mapping = aes(x = spin_rate, y = break_angle, color = pitch_type)) +
+  geom_point() +
+  labs(x = "Spin Rate", y = "Deviation from Straight line during flight", title="Spin Rate and Break Angle for each Pitch Type")
+
+ggplot(data = pitches_spin_cleaned, mapping = aes(x = spin_rate, y = pfx_x, color = pitch_type)) +
+  geom_point() +
+  labs(x = "Spin Rate", y = "Horizontal Movement during flight", title="Spin Rate and Horizontal Movement for each Pitch Type")
+
+ggplot(data = pitches_spin_cleaned, mapping = aes(x = spin_rate, y = pfx_z, color = pitch_type)) +
+  geom_point() +
+  labs(x = "Spin Rate", y = "Verical Movement during flight", title="Spin Rate and Vertical Movement for each Pitch Type")
+
+```
+
+
+
+
+I'm interested in the change in velocities and comparing that with the spin rate. To do this, I will use the start and end speed variables.
+
+```{r magnitudes}
+
+# Calculate speed
+pitches_magnitude <- pitches_spin_cleaned |>
+  mutate(speed_change = start_speed - end_speed)
+
+# Basic scatter plot
+ggplot(data = pitches_magnitude, mapping = aes(x = spin_rate, y = speed_change, color = pitch_type)) +
+  geom_point() +
+  labs(x = "Spin Rate", y = "Change in velocity during flight", title="Spin Rate and Change in Velocity for each Pitch Type")
+
+# facet wrapped scatter
+ggplot(data = pitches_magnitude, mapping = aes(x = spin_rate, y = speed_change, color = pitch_type)) +
+  geom_point() +
+  facet_wrap(~ pitch_type) +
+  labs(x = "Spin Rate", y = "Change in velocity during flight", title="Spin Rate and Change in Velocity for each Pitch Type")
+
+# Box plot
+ggplot(data = pitches_magnitude, mapping = aes(x = pitch_type, y = speed_change, fill = pitch_type)) +
+  geom_boxplot(show.legend=F) +
+  labs(x = "Pitch Type", y = "Change in velocity during flight", title="Change in Velocity for each Pitch Type")
+
+# Perform ANOVA on this
+anova_speed <- aov(speed_change ~ pitch_type, data = pitches_magnitude)
+summary(anova_spin)
+
+```
+This is also significant, although the scatter plot is not clear (another conglomerate of points). Because of this, there are included facet wrapped scatter plots and a box plot above to help visualize the data.
+
+Although significant, the change in speed does not offer an as clear of options for us. As such, I will proceed using spin rate, break angle, and horizontal/lateral movement
+
+```{r last graphs}
+# As a result of "messy graphs" I will be filtering for outliers at 3 standard deviations from the mean
+# Calculating mean and standard deviation for each column
+summary_stats <- pitches_spin_cleaned |>
+  summarise(across(c(spin_rate, break_angle, pfx_x, pfx_z, end_speed, start_speed),
+                   list(mean = mean, sd = sd)))
+
+# Define a threshold for outliers (e.g., 3 standard deviations from the mean)
+threshold <- 3
+
+# Remove outliers using dplyr filtering
+pitches_filtered <- pitches_spin_cleaned |>
+  filter(
+    abs(spin_rate - summary_stats$spin_rate_mean) <= threshold * summary_stats$spin_rate_sd,
+    abs(break_angle - summary_stats$break_angle_mean) <= threshold * summary_stats$break_angle_sd,
+    abs(pfx_x - summary_stats$pfx_x_mean) <= threshold * summary_stats$pfx_x_sd,
+    abs(pfx_z - summary_stats$pfx_z_mean) <= threshold * summary_stats$pfx_z_sd,
+    abs(end_speed - summary_stats$end_speed_mean) <= threshold * summary_stats$end_speed_sd,
+    abs(start_speed - summary_stats$start_speed_mean) <= threshold * summary_stats$start_speed_sd
+  )
+
+
+# Combine into columns so that facet wrapping is easy across them
+pitches_filtered |>
+  pivot_longer(cols = c(spin_rate, break_angle, pfx_x, pfx_z, end_speed, start_speed), names_to = "Var", values_to = "val") ->
+  pitches_long_spin
+
+ggplot(data = pitches_long_spin, mapping = aes(x = pitch_type, y = val, fill = pitch_type)) +
+  geom_boxplot(show.legend = F) +
+  facet_wrap(~ Var, scales = "free_y", ncol = 2) +
+  labs(x="Pitch Type", y = NULL, title = "Boxplots for Pitch Types over Several Variables")
+
+# The same thing but without start and end speed
+pitches_filtered |>
+  pivot_longer(cols = c(spin_rate, break_angle, pfx_x, pfx_z), names_to = "Var", values_to = "val") ->
+  pitches_long_spin
+
+ggplot(data = pitches_long_spin, mapping = aes(x = pitch_type, y = val, fill = pitch_type)) +
+  geom_boxplot(show.legend = F) +
+  facet_wrap(~ Var, scales = "free_y", ncol = 2) +
+  labs(x="Pitch Type", y = NULL, title = "Boxplots for Pitch Types over Several Variables")
+
+
+```
+I think the last graph from the previous code chunk, and the following to display the faceted spin by angle break data should suffice to show the relationships
+
+
+```{r spin break}
+
+# Plotting the spin rate with break angle, by each pitch type - This could be interesting to include since it contains a neat graph: the amount of angle break is bounded by what is possible. As shown above, this is mirrored in horizontal movement during flight, and somewhat vertical movement (pfx_x and pfx_z, respecitvely)
+ggplot(data = pitches_filtered, mapping = aes(x = spin_rate, y = break_angle, color = pitch_type)) +
+  geom_point(alpha = 0.5) +
+  labs(x = "Spin Rate", y = "Break Angle",title = "Spin Rate and Break Angle for Each Pitch Type")
+
+
+# The same thing but using facets to view the data
+ggplot(data = pitches_filtered, mapping = aes(x = spin_rate, y = break_angle, color = pitch_type)) +
+  geom_point(show.legend = F) +
+  facet_wrap(facets = ~pitch_type, scales = "free_y") +
+  labs(x = "Spin Rate", y = "Break Angle",title = "Spin Rate and Break Angle for Each Pitch Type")
+
+
+
+```
+
+From this above graph there are some pretty distinct "quirks" for each pitch type. For instance, the cone shape is very similar across all pitch types. This comes down to the physical limitations of physics, being that there is a maximum spin rate that can be achieved, and for each spin rate there is a maximum angle break that can be hit. As such, this traces out a cone where the higher the spin rate the higher the angle break will be higher, depending on the pitch. There are even some pitch types that disclude the center - the angle break never is zero or quickly diverges from zero. 
+
+TODO - Add names for pitch types, the readability of CH or CU, etc is devastating.
+
+
+
