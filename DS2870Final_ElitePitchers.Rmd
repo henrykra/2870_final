@@ -1,0 +1,71 @@
+---
+title: 'DS 2870: Final Project'
+author: "Andy English"
+date: "2023-11-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+pacman::p_load(tidyverse, dplyr, ggplot2)
+pitches <- 
+  read.csv('2018_pitches_full.csv')
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r Elite Pitchers}
+elite_pitchers <- 
+  pitches |>
+  filter(pitcher_id == 425794 | pitcher_id == 433587 | pitcher_id == 446372 | pitcher_id == 456034 | pitcher_id == 453286 | pitcher_id == 434378 | pitcher_id == 519144 | pitcher_id == 502042 | pitcher_id == 425844 | pitcher_id == 594798 | pitcher_id == 543606 | pitcher_id == 543037 | pitcher_id == 545333 | pitcher_id == 453562 | pitcher_id == 605400 | pitcher_id == 518516 | pitcher_id == 457918 | pitcher_id == 461829 | pitcher_id == 519242 | pitcher_id == 500779 | pitcher_id == 605483 | pitcher_id == 452657 | pitcher_id == 430935 | pitcher_id == 572971 | pitcher_id == 571578)
+
+elite_avg <- 
+  elite_pitchers |>
+  summarise(avgvelo = mean(start_speed, na.rm = TRUE),
+            avgbreak = mean(break_length, na.rm = TRUE),
+            avgspin = mean(spin_rate, na.rm = TRUE)
+            )
+
+event_counts <- elite_pitchers |>
+  group_by(event) |>
+  summarise(count = n()) |>
+  arrange(count)
+event_counts <- event_counts[-(1:13), ]
+
+# Convert the counts to a proportion
+event_counts$proportion <- event_counts$count / sum(event_counts$count)
+
+ggplot(event_counts, aes(x = "", y = proportion, fill = event)) +
+  geom_bar(stat = "identity", width = 1, color = "black", linewidth = .5) +
+  coord_polar("y", start = 0) +
+  theme_void() +
+  theme(legend.title = element_blank()) +
+  labs(fill = "Event Type")
+
+elite_pitchers |>
+  filter(pitch_type == 'FF') |>
+  summarise(avgFFvelo = mean(start_speed, na.rm = TRUE))
+
+
+  
+
+```
+
+
+
+```{r Elite Pitch Types}
+pitch_type_counts <- elite_pitchers %>%
+  group_by(pitch_type) %>%
+  summarise(count = n()) %>%
+  arrange(desc(count))
+
+pitch_type_dist <- 
+  ggplot(pitch_type_counts, aes(x = pitch_type, y = count, fill = pitch_type)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  labs(x = "Pitch Type", y = "Count", title = "Distribution of Pitch Types among Elite Pitchers")
+
