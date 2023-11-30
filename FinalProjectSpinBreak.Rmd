@@ -220,7 +220,7 @@ Considering these variables have some similarities, it makes sense that each of 
 # Mutate FO to PO since they are the same, remove "" and AB since are an error or occur rarely
 pitches_spin_cleaned <- pitches |>
   mutate(pitch_type = ifelse(pitch_type == "FO","PO", pitch_type)) |>
-  filter(!pitch_type %in% c("", "AB","EP"))
+  filter(!pitch_type %in% c("", "AB","EP","PO"))
 
 # Plot basic ones relationships between spin rate and the other variables
 ggplot(data = pitches_spin_cleaned, mapping = aes(x = spin_rate, y = break_angle, color = pitch_type)) +
@@ -321,26 +321,41 @@ I think the last graph from the previous code chunk, and the following to displa
 
 
 ```{r spin break}
-
-# Plotting the spin rate with break angle, by each pitch type - This could be interesting to include since it contains a neat graph: the amount of angle break is bounded by what is possible. As shown above, this is mirrored in horizontal movement during flight, and somewhat vertical movement (pfx_x and pfx_z, respecitvely)
-ggplot(data = pitches_filtered, mapping = aes(x = spin_rate, y = break_angle, color = pitch_type)) +
+renamed_pitches_clean <- pitches_filtered |>
+  mutate(updated_pitch_type = recode(
+    pitch_type,
+    "CH" = "Changeup",
+    "CU" = "Curveball",
+    "FC" = "Cutter",
+    "FF" = "Four-seam Fastball",
+    "FS" = "Splitter",
+    "FT" = "Two-seam Fastball",
+    "KC" = "Knuckle curve",
+    "KN" = "Knuckleball",
+    "SC" = "Screwball",
+    "SI" = "Sinker",
+    "SL" = "Slider"
+  ))
+# Plotting the spin rate with break angle, by each pitch type - This could be interesting to include since it contains a neat graph: the amount of angle break is bounded by what is possible. As shown above, this is mirrored in horizontal movement during flight, and somewhat vertical movement (pfx_x and pfx_z, respectively)
+ggplot(data = renamed_pitches_clean, mapping = aes(x = spin_rate, y = break_angle, color = updated_pitch_type)) +
   geom_point(alpha = 0.5) +
-  labs(x = "Spin Rate", y = "Break Angle",title = "Spin Rate and Break Angle for Each Pitch Type")
+  labs(x = "Spin Rate", y = "Break Angle",
+       title = "Spin Rate and Break Angle for Each Pitch Type")
 
 
 # The same thing but using facets to view the data
-ggplot(data = pitches_filtered, mapping = aes(x = spin_rate, y = break_angle, color = pitch_type)) +
-  geom_point(show.legend = F) +
-  facet_wrap(facets = ~pitch_type, scales = "free_y") +
-  labs(x = "Spin Rate", y = "Break Angle",title = "Spin Rate and Break Angle for Each Pitch Type")
-
+ggplot(data = renamed_pitches_clean, mapping = aes(x = spin_rate, y = break_angle, color = updated_pitch_type)) +
+  geom_point(show.legend = F, alpha = 0.15) + # Low alpha to allow you to see densities of points
+  facet_wrap(facets = ~updated_pitch_type) +
+  labs(x = "Spin Rate", y = "Break Angle",
+       title = "Spin Rate and Break Angle for Each Pitch Type") + 
+  theme(plot.title = element_text(hjust = 0.5))
 
 
 ```
 
 From this above graph there are some pretty distinct "quirks" for each pitch type. For instance, the cone shape is very similar across all pitch types. This comes down to the physical limitations of physics, being that there is a maximum spin rate that can be achieved, and for each spin rate there is a maximum angle break that can be hit. As such, this traces out a cone where the higher the spin rate the higher the angle break will be higher, depending on the pitch. There are even some pitch types that disclude the center - the angle break never is zero or quickly diverges from zero. 
 
-TODO - Add names for pitch types, the readability of CH or CU, etc is devastating.
 
 
 
