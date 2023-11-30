@@ -347,7 +347,7 @@ ggplot(data = renamed_pitches_clean, mapping = aes(x = spin_rate, y = break_angl
 ggplot(data = renamed_pitches_clean, mapping = aes(x = spin_rate, y = break_angle, color = updated_pitch_type)) +
   geom_point(show.legend = F, alpha = 0.15) + # Low alpha to allow you to see densities of points
   facet_wrap(facets = ~updated_pitch_type) +
-  labs(x = "Spin Rate", y = "Break Angle",
+  labs(x = "Spin Rate (RPM)", y = "Break Angle (Degrees)", # need double check on degrees
        title = "Spin Rate and Break Angle for Each Pitch Type") + 
   theme(plot.title = element_text(hjust = 0.5))
 
