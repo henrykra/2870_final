@@ -7,7 +7,7 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-pacman::p_load(tidyverse, dplyr, ggplot2)
+pacman::p_load(tidyverse, dplyr, ggplot2, viridis, scales)
 pitches <- 
   read.csv('2018_pitches_full.csv')
 ```
@@ -23,6 +23,7 @@ elite_pitchers <-
   pitches |>
   filter(pitcher_id == 425794 | pitcher_id == 433587 | pitcher_id == 446372 | pitcher_id == 456034 | pitcher_id == 453286 | pitcher_id == 434378 | pitcher_id == 519144 | pitcher_id == 502042 | pitcher_id == 425844 | pitcher_id == 594798 | pitcher_id == 543606 | pitcher_id == 543037 | pitcher_id == 545333 | pitcher_id == 453562 | pitcher_id == 605400 | pitcher_id == 518516 | pitcher_id == 457918 | pitcher_id == 461829 | pitcher_id == 519242 | pitcher_id == 500779 | pitcher_id == 605483 | pitcher_id == 452657 | pitcher_id == 430935 | pitcher_id == 572971 | pitcher_id == 571578)
 
+# Finding average for key pitching variables
 elite_avg <- 
   elite_pitchers |>
   summarise(avgvelo = mean(start_speed, na.rm = TRUE),
@@ -34,38 +35,101 @@ event_counts <- elite_pitchers |>
   group_by(event) |>
   summarise(count = n()) |>
   arrange(count)
-event_counts <- event_counts[-(1:13), ]
+event_counts <- event_counts[-(1:13), ] # Removing very rare events
 
 # Convert the counts to a proportion
 event_counts$proportion <- event_counts$count / sum(event_counts$count)
 
-ggplot(event_counts, aes(x = "", y = proportion, fill = event)) +
+# Visualize all outcomes of at-bats vs Elite Ps
+ggplot(event_counts, mapping = aes(x = "", y = proportion, fill = event)) +
   geom_bar(stat = "identity", width = 1, color = "black", linewidth = .5) +
   coord_polar("y", start = 0) +
   theme_void() +
-  theme(legend.title = element_blank()) +
-  labs(fill = "Event Type")
-
-elite_pitchers |>
-  filter(pitch_type == 'FF') |>
-  summarise(avgFFvelo = mean(start_speed, na.rm = TRUE))
-
-
-  
-
+  labs(title = 'AB outcomes vs Elite Pitchers', fill = "Event Type")
 ```
 
 
 
-```{r Elite Pitch Types}
-pitch_type_counts <- elite_pitchers %>%
-  group_by(pitch_type) %>%
-  summarise(count = n()) %>%
-  arrange(desc(count))
+``
+```{r Elite Pitch Type}
+pitch_type_counts <- elite_pitchers |>
+  group_by(pitch_type) |>
+  summarise(count = n()) |>
+  arrange(count)
 
-pitch_type_dist <- 
-  ggplot(pitch_type_counts, aes(x = pitch_type, y = count, fill = pitch_type)) +
+# Remove niche pitches, missing, and pitchouts
+pitch_type_counts <- pitch_type_counts[-(1:3), ]
+
+# Pitch Selection bar graph 
+  ggplot(pitch_type_counts, mapping = aes(x = pitch_type, y = count, fill = pitch_type)) +
   geom_bar(stat = "identity") +
   theme_minimal() +
   labs(x = "Pitch Type", y = "Count", title = "Distribution of Pitch Types among Elite Pitchers")
+
+```
+```{r Velo, Spin Correlation with Strikeouts }
+elite_pitchers <- elite_pitchers %>%
+  mutate(is_strikeout = ifelse(event %in% c('Strikeout', 'Strikeout - DP'), 1, 0), is_out = ifelse(event %in% c('Flyout', 'Groundout', 'Forceout', 'Double Play', 'Fielders Choice Out', 'Lineout', 'Pop Out', 'Runner Out'), 1, 0))
+```
+
+
+```{r Velo, Spin Correlation with Strikeouts }
+# Calculate the correlation between spin rate and strikeout rate
+spin_strikeout_cor <- cor(elite_pitchers$spin_rate, elite_pitchers$is_strikeout, use = "complete.obs")
+
+# Calculate the correlation between velocity and strikeout rate
+velocity_strikeout_cor <- cor(elite_pitchers$start_speed, elite_pitchers$is_strikeout, use = "complete.obs")
+
+spin_K_model <- glm(is_strikeout ~ spin_rate, data = elite_pitchers, family = 'binomial')
+summary(strikeout_model)
+
+velo_K_model <- glm(is_strikeout ~ start_speed, data = elite_pitchers, family = 'binomial')
+summary(velo_K_model)
+
+```
+
+```{r Heat Map}
+# This is pretty ugly, want to use Henry's strike zone
+ggplot(elite_pitchers, aes(x = px, y = pz)) +
+  geom_bin2d(bins = 200) +
+  scale_fill_viridis() +
+  theme_minimal() +
+  labs(title = "Density of Pitch Locations", x = "Horizontal Location", y = "Vertical Location")
+
+# Find average velocity for 3 types of fastballs
+elite_pitchers |>
+  filter(pitch_type == 'FF' | pitch_type == 'FT' | pitch_type == 'FC') |>
+  summarise(avg_FFvelo = mean(start_speed, na.rm = TRUE))
+
+# Bad graph
+# elite_pitchers |>
+  #filter(pitch_type == 'FF' | pitch_type == 'FT' | pitch_type == 'FC') |>
+  #ggplot(mapping = aes(x = px, y = pz)) +
+  #geom_bin2d(bins = 100) +  
+  #geom_point(color = "red", shape = 1, size = 0.1, alpha = 0.1) +  
+  #theme_minimal() + 
+  #theme(legend.position = "right") +  
+  #labs(title = "Density of Fastball Locations", x = "Horizontal Location", y = "Vertical Location")  
+  
+
+```
+
+```{r Strikeout Predictive Modeling}
+# Ensuring there are no missing values in the data
+elite_pitchers1 <- elite_pitchers %>%
+  filter(complete.cases(start_speed, spin_rate, nasty, is_strikeout))
+elite_pitchers1$is_strikeout <- factor(elite_pitchers1$is_strikeout, levels = c(0, 1), labels = c("No", "Yes"))
+
+# Logistic regression model for predicting strikeouts, using more variables
+strikeout_model <- glm(is_strikeout ~ start_speed + spin_rate + nasty, data = elite_pitchers1, family = "binomial")
+summary(strikeout_model)
+
+# Visualize the model's predicted probabilities, it doesn't look very good, correlation or aesthetically
+elite_pitchers1$predicted_strikeout <- predict(strikeout_model, type = "response")
+ggplot(elite_pitchers1, aes(x = predicted_strikeout, fill = factor(is_strikeout))) +
+  geom_histogram(binwidth = 0.01, position = 'dodge') +
+  scale_fill_manual(name = "Strikeout", values = c("No" = "red", "Yes" = "green")) +
+  theme_minimal() +
+  labs(title = "Predicted Probability of Strikeouts", x = "Predicted Probability", y = "Count")
+
 
