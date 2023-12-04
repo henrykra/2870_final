@@ -14,11 +14,6 @@ pacman::p_load(rpart, rpart.plot, tidyverse, caret)
 
 theme_set(theme_bw())
 
-#  We will use the data cats, which is in the package, MASS 
-cats <- 
-  MASS::cats |> 
-  rename(heart_wt = Hwt,
-         body_wt = Bwt)
 
 ```
 
@@ -200,12 +195,14 @@ Now, we perform aov tests to determine statistical differences between groups fo
 # Performing ANOVA for each variable
 anova_spin <- aov(spin_rate ~ pitch_type, data = pitches)
 anova_break <- aov(break_angle ~ pitch_type, data = pitches)
+summary(anova_spin)
+summary(anova_break)
+
 anova_pfxx <- aov(pfx_x ~ pitch_type, data = pitches)
 anova_pfxz <- aov(pfx_z ~ pitch_type, data = pitches)
 
 # Summary of ANOVA results
-summary(anova_spin)
-summary(anova_break)
+
 summary(anova_pfxx)
 summary(anova_pfxz)
 
