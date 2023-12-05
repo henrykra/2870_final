@@ -197,7 +197,8 @@ caret::varImp(pitches_pruned) |>
            color = "black") + 
   
   labs(x = NULL,
-       y = "Variable Importance") + 
+       y = "Variable Importance",
+       title = "Variable Importance in Pruned Classification Tree for Pitch type data") + 
   
   scale_y_continuous(expand = c(0, 0, 0.05, 0)) +
   
@@ -212,7 +213,7 @@ caret::varImp(pitches_pruned) |>
 predict(
   object = pitches_pruned,
   newdata = pitches_filtered2,
-  type = "class"    # removing this will give the probabilities for each one for each case
+  type = "class"
 ) ->
   pitches_predicted
 
@@ -231,7 +232,7 @@ confusionMatrix(
 Given the previous table of variance importance, let us try making a smaller tree by removing everything up to pz
 ```{r clean again}
 
-to_remove2 <- c("pz", "px", "ay", "y", "x", "sz_bot", "sz_top", "break_y", "y0")
+to_remove2 <- c("sz_bot", "sz_top", "break_y", "y0")
 
 pitches_filtered3 <- pitches_filtered2 |>
   select(-all_of(to_remove2))
@@ -330,7 +331,12 @@ confusionMatrix(
 ```
 6740 splits
 
-Number of splits is lower for having lower variables.
+```{r complexities}
+
+c("reduced leaf nodes" = pitches_prune_reduced$cptable,
+  "regular leaf nodes" = pitches_pruned$cptable)
+
+```
 
 
 
