@@ -1,0 +1,231 @@
+---
+title: "Pitch Classification"
+author: "skyler heininger"
+date: "2023-12-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = TRUE,
+                      fig.align = "center")
+pacman::p_load(rpart, rpart.plot, tidyverse, caret)
+
+theme_set(theme_bw())
+
+```
+
+```{r load data}
+
+# Load from the correct csv - this will take some time, it is a large dataset (724444 data entries)
+pitches <- read.csv("2018_pitches_full.csv")
+
+```
+
+
+First, we need to filter for some variables. This is because certain things, like name of the pitcher, shouldn't be used as this will make a dreadfully large classification tree. All ids need to be removed too.
+
+```{r clean for tree}
+
+# View the data
+tibble(head(pitches))
+
+# Need to remove batter name and pitcher name, and all ids 
+# also need to filter out bad pitch data
+pitches_filtered <- pitches |>
+  select(-c(pitcher_name, batter_name, pitcher_id, g_id, batter_id, ab_id)) |>
+  filter(!pitch_type %in% c("", "AB","EP","PO", "FO")) |>
+  mutate(code = as.factor(code),
+         type = as.factor(code),
+         zone = as.factor(zone),
+         pitch_type = as.factor(pitch_type),
+         across(where(is.character), as.factor))
+
+# Make sure correct columns are removed
+tibble(head(pitches_filtered))
+
+# Check pitch types
+unique(pitches_filtered$pitch_type)
+
+```
+
+Next, we will create a full tree
+
+```{r full tree}
+# I'm keeping rngversion here for testing purposes, in practice may want to change this?
+RNGversion("4.1.0")
+set.seed(2870)
+
+# Build the full decision tree here
+pitch_full_tree_long <- rpart(
+  formula = pitch_type ~ .,   # explanatory and response variables
+  data = pitches_filtered,
+  method = "class",
+  parms = list(split = "information"), # Using entropy
+  minsplit = 0,
+  minbucket = 0,
+  cp = -1
+)
+
+
+pitch_full_tree_long
+
+
+```
+
+The above takes a long, long time. As such, I will trim down the amount of variables used, starting with factor variables. That way, we are classifying pitches based on sensor data. This additionally removes a bunch of other pitches, such as the game state.
+
+```{r smaller data}
+
+tibble(head(pitches_filtered))
+
+pitches_filtered |>
+  select(where(is.factor)) |>
+  colnames() ->
+  to_remove
+
+to_remove <- to_remove[to_remove != "pitch_type"]
+
+pitches_filtered2 <- pitches_filtered |>
+  # The following select removes all unnecessary variables (unnecessary having to do with anything but the pitch itself)
+  select(-all_of(to_remove), # This keeps pitch_type, which is needed (Rstudio recommended all_of)
+         -c(inning, p_score, o, outs, on_1b, on_2b, on_3b, outs, 
+            event_num, outs, b_score, b_count, s_count, type_confidence, pitch_num))
+
+
+tibble(head(pitches_filtered2))
+
+# Build the full decision tree here (This will take a while to do, mine took around 15 minutes)
+pitch_full_tree <- rpart(
+  formula = pitch_type ~ .,   # explanatory and response variables
+  data = pitches_filtered2,
+  method = "class",
+  parms = list(split = "information"), # Using entropy
+  minsplit = 0,
+  minbucket = 0,
+  cp = -1
+)
+
+# pitch_full_tree # This fills your output, I would not recommend at all 
+
+
+```
+
+Plot the tree
+```{r full_plot}
+ # plotting the full tree is not recommended (crashed my Rstudio when I did it, but here is the code if you want)
+rpart.plot(
+  x = pitch_full_tree, 
+  type = 5, 
+  extra = 101
+  )
+
+
+```
+
+Next, let us prune the tree
+
+```{r prune}
+
+pitch_full_tree$cptable |> 
+  data.frame() |>
+  # finding row with smallest xerror
+  slice_min(xerror, n=1, with_ties = F) |>
+  # create xerror cutoff = xerror + xstd
+  mutate(xerror_cutoff = xerror + xstd) |>
+  # picking xerror_cutoff table
+  pull(xerror_cutoff) ->   # Saves as vector, only give one column
+  xcutoff
+
+# Finding the "best" tree using xcutoff
+pitch_full_tree$cptable |> 
+  data.frame() |>
+  # Keeping all rows below xcutoff
+  filter(xerror < xcutoff) |>      
+  # Get simplest one
+  slice(1)
+
+# Finding the "best" tree using xcutoff
+pitch_full_tree$cptable |> 
+  data.frame() |>
+  # Keeping all rows below xcutoff
+  filter(xerror < xcutoff) |>  
+  # Get simplest one
+  slice(1) |>
+  # Picking cp value out of dataframe 
+  pull(CP) ->
+  cp_prune
+
+c("xerror cutoff" = xcutoff,
+  "cp prune value" = cp_prune)
+
+
+```
+
+
+Plot pruned tree
+
+```{r plot pruned}
+
+
+pitches_pruned <- prune(tree = pitch_full_tree,
+                     cp = cp_prune)
+
+pitches_pruned
+
+# Then plot it:
+rpart.plot(
+  x = pitches_pruned,
+  type = 5,      # Simply the best type output, change if need different
+  extra = 101    # includes numbers
+  )
+
+```
+
+
+Get variable importance and plot it
+```{r varImp}
+# This code is taken directly from class, plot importance of variables
+caret::varImp(pitches_pruned) |> 
+  arrange(desc(Overall)) |> 
+  rownames_to_column(var = "variable") |> 
+  
+  ggplot(mapping = aes(x = fct_reorder(variable, -Overall),
+                       y = Overall)) + 
+  
+  geom_col(fill = "steelblue",
+           color = "black") + 
+  
+  labs(x = NULL,
+       y = "Variable Importance") + 
+  
+  scale_y_continuous(expand = c(0, 0, 0.05, 0)) +
+  
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+
+
+```{r prediction}
+
+predict(
+  object = pitches_pruned,
+  newdata = pitches_filtered2,
+  type = "class"    # removing this will give the probabilities for each one for each case
+) ->
+  pitches_predicted
+
+reference <- as.factor(pitches_filtered2$pitch_type)
+
+c("reference" = unique(reference), "predicted" = unique(pitches_predicted))
+
+# Creating the confusion matrix:
+confusionMatrix(
+  data = pitches_predicted,
+  reference = pitches_filtered2$pitch_type
+)
+
+```
+
+
+
