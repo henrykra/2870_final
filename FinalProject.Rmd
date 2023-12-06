@@ -8,7 +8,9 @@ output: html_document
 ## Set up
 ```{r setup, message = FALSE}
 knitr::opts_chunk$set(echo = TRUE,
-                      fig.align = "center")
+                      fig.align = "center",
+                      warning = F,
+                      message = F)
 pacman::p_load(rpart, rpart.plot, tidyverse, caret)
 
 theme_set(theme_bw())
