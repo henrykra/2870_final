@@ -23,65 +23,67 @@ This project focused on analyzing MLB pitch data from 2018. This data was genera
 
 ```{r Code Chunk 1: data loading and cleaning}
 
-library(tidyverse)
-# Load all data relevant to the pitches
-pitches <- read.csv("data/pitches.csv")
-abs <- read.csv("data/atbats.csv")
-names <- read.csv("data/player_names.csv")
-games <- read.csv("data/games.csv")
+# # Load all data relevant to the pitches
+# pitches <- read.csv("data/pitches.csv")
+# abs <- read.csv("data/atbats.csv")
+# names <- read.csv("data/player_names.csv")
+# games <- read.csv("data/games.csv")
+# 
+# # Join pitches and at bat, filter for 2018
+# p_2018 <-
+#   pitches |>
+#   left_join(
+#     y = abs,
+#     by = "ab_id"
+#   ) |>
+#   filter(
+#     g_id >= 201800000
+#   )
+# 
+# # Join pitches/atbat with batter names dataset
+# p_2018_names <-
+#   p_2018 |>
+#   left_join(
+#     y = names,
+#     by = c("batter_id" = "id"),
+#     keep = F
+#   )
+# 
+# # Make full batter name using first name and last name
+# p_2018_names_2 <-
+#   p_2018_names |>
+#   mutate(batter_name = paste(first_name, last_name))
+# 
+# # join pitcher names into dataset
+# p_2018_names_3 <-
+#   p_2018_names_2 |>
+#   left_join(
+#     y = names,
+#     by = c("pitcher_id" = "id"),
+#     keep = F
+#   )
+# 
+# # Make full name for pitchers, remove
+# # individual first and last names
+# pitches_2018_full <-
+#   p_2018_names_3 |>
+#   mutate(pitcher_name = paste(first_name.y,
+#                               last_name.y)) |>
+#   select(-first_name.x, -first_name.y,
+#          -last_name.x, -last_name.y)
+# 
+# # Save dataset
+# write.csv(pitches_2018_full, "data/2018_pitches_full.csv",
+#           row.names = F,
+#           quote = F)
+pitches <- read.csv("2018_pitches_full.csv")
 
-# Join pitches and at bat, filter for 2018
-p_2018 <- 
-  pitches |> 
-  left_join(
-    y = abs,
-    by = "ab_id"
-  ) |> 
-  filter(
-    g_id >= 201800000
-  )
-
-# Join pitches/atbat with batter names dataset
-p_2018_names <-
-  p_2018 |> 
-  left_join(
-    y = names,
-    by = c("batter_id" = "id"),
-    keep = F
-  )
-
-# Make full batter name using first name and last name
-p_2018_names_2 <-
-  p_2018_names |> 
-  mutate(batter_name = paste(first_name, last_name))
-
-# join pitcher names into dataset
-p_2018_names_3 <-
-  p_2018_names_2 |> 
-  left_join(
-    y = names,
-    by = c("pitcher_id" = "id"),
-    keep = F
-  )
-
-# Make full name for pitchers, remove 
-# individual first and last names
-pitches_2018_full <-
-  p_2018_names_3 |> 
-  mutate(pitcher_name = paste(first_name.y, 
-                              last_name.y)) |> 
-  select(-first_name.x, -first_name.y, 
-         -last_name.x, -last_name.y)
-
-# Save dataset
-write.csv(pitches_2018_full, "data/2018_pitches_full.csv", 
-          row.names = F, 
-          quote = F)
 
 ```
 
 ## II. Data Visualizations
-	One of the relationships we wanted to pursue was the differences in spin rate and angle break between different pitch types. Spin rate is how fast the ball is spinning around its axis, in rotations per minute. The angle break is the angle in degrees of deviation from the theoretical path of the baseball, if it continued to fly in a directly straight line.
+
+One of the relationships we wanted to pursue was the differences in spin rate and angle break between different pitch types. Spin rate is how fast the ball is spinning around its axis, in rotations per minute. The angle break is the angle in degrees of deviation from the theoretical path of the baseball, if it continued to fly in a directly straight line.
 
 
 ```{r spin break}
@@ -128,17 +130,27 @@ ggplot(data = renamed_pitches_clean, mapping = aes(x = spin_rate, y = break_angl
   theme(plot.title = element_text(hjust = 0.5))
 
 ```
-  The above figure has several interesting aspects. To start, every graph shows bounds along the upper and lower sides, with the same cone-shape. This is due to a sort of maximum angle break possible per a given spin rate. Across all pitches, this varies slightly, but every pitch type follows this similar cone shape, indicating a threshold for angle break given a spin rate. To note, the presence of the negative break angle axis comes from left and right handed pitchers, changing how the ball flies through the air. 
-	Past simply spin rate and angle break, the shapes of each pitch type varies, slightly in some cases, and more significantly in other cases. For instance, a Knuckleball will not exceed a spin rate of 2200, based on this dataset. As such, knuckleballs also do not reach higher angle breaks. There are also noteworthy scenarios in the data where at higher spin rates, smaller angle breaks aren’t possible. This occurs for Changeups, Splitters, Sinkers, Two-seam Fastballs, Four-seam Fastballs, and other pitch types, to varying degrees. Really, the higher the spin rate, across most pitch types, the fewer the pitches that have low angle breaks. The only exceptions are the Four-seam Fastball and the Cutter, which both have angle breaks of 0° at spin rates around 2500 rpm. This clearly shows different behaviors of the ball during flight for different pitch types, although there are more differences between some pitch types than others. In conclusion for this data visualization, there are distinct differences in angle break and spin rate mechanics based on the pitch type. To prove this, Code Chunk 2 displays ANOVA tests of spin rate and break angle across pitch types, both of which are statistically significant. This indicates that both the spin rate and break angle of each pitch type is unique.
+
+The above figure has several interesting aspects. To start, every graph shows bounds along the upper and lower sides, with the same cone-shape. This is due to a sort of maximum angle break possible per a given spin rate. Across all pitches, this varies slightly, but every pitch type follows this similar cone shape, indicating a threshold for angle break given a spin rate. To note, the presence of the negative break angle axis comes from left and right handed pitchers, changing how the ball flies through the air. 
+
+Past simply spin rate and angle break, the shapes of each pitch type varies, slightly in some cases, and more significantly in other cases. For instance, a Knuckleball will not exceed a spin rate of 2200, based on this dataset. As such, knuckleballs also do not reach higher angle breaks. There are also noteworthy scenarios in the data where at higher spin rates, smaller angle breaks aren’t possible. This occurs for Changeups, Splitters, Sinkers, Two-seam Fastballs, Four-seam Fastballs, and other pitch types, to varying degrees. Really, the higher the spin rate, across most pitch types, the fewer the pitches that have low angle breaks. The only exceptions are the Four-seam Fastball and the Cutter, which both have angle breaks of 0° at spin rates around 2500 rpm. This clearly shows different behaviors of the ball during flight for different pitch types, although there are more differences between some pitch types than others. In conclusion for this data visualization, there are distinct differences in angle break and spin rate mechanics based on the pitch type. To prove this, Code Chunk 2 displays ANOVA tests of spin rate and break angle across pitch types, both of which are statistically significant. This indicates that both the spin rate and break angle of each pitch type is unique.
 
 ```{r code chunk 2 anova tests and summary statistics}
+# Means for each pitch type for spin rate and break rate
+renamed_pitches_clean |>
+  group_by(pitch_type) |>
+  summarize(avg_break_angle = mean(break_angle),
+            avg_spin_rate = mean(spin_rate)) ->
+  avgs
 
+head(avgs, 11)
+
+# Anova tests
 anova_spin <- aov(spin_rate ~ pitch_type, data = pitches)
 anova_break <- aov(break_angle ~ pitch_type, data = pitches)
 summary(anova_spin)
 summary(anova_break)
 
-# Need to add more to this, based on comments
 ```
 
 
@@ -154,7 +166,7 @@ One of the unique aspects of our dataset is the exact coordinates of each pitch 
 
 The data shows that all pitchers generally prefer to throw to the batters outside, no matter which side of the plate the batter lines up on. The pitcher favored matchups, where the pitchers throwing hand is the same as the batter’s stance, have noticeably different distributions compared to the batter favored matchups. In the pitcher favored matchups, the top of the zone has more pitches on the pitcher’s arm side, and at the lower areas of the plate, the pitches tail off to the glove side. 
 
-	We were also curious to see how pitch location is affected by pitch type. 
+We were also curious to see how pitch location is affected by pitch type. 
 
 
 ```{r second heat map}
@@ -272,6 +284,9 @@ pitch_full_tree$cptable |>
 c("xerror cutoff" = xcutoff,
   "cp prune value" = cp_prune)
 
+pitches_pruned <- prune(tree = pitch_full_tree,
+                     cp = cp_prune)
+
 ```
 
 ```{r variables of importance}
@@ -314,20 +329,24 @@ confusionMatrix(
 
 ```
 
-  Based on these figures, especially the variable importance figure, we decided to try moving forward with reducing complexity of the classification tree by removing unimportant variables. This entailed removing the variables strikezone top and bottom, break in the y direction, and starting y position. This increased the number of splits in the classification tree from 4568 to 6886, with an overall accuracy increase from 86.46% to 87.59%. This was done using the same pipeline as outlined within the previous three code chunks. This drastic increase in complexity while hardly increasing accuracy was determined not to be useful. As such, the final classification tree for determining pitch type uses the variables shown in the variable importance graph. The importances of these variables are very interesting to see, with break length, start speed, velocity in the y direction, acceleration in the z direction, and end speed are the five most important variables. Close after this is spin rate, which makes sense as a useful variable for classification based on our prior data analysis. Break angle, another variable we had analyzed previously, was less useful, but useful nonetheless. 
+Based on these figures, especially the variable importance figure, we decided to try moving forward with reducing complexity of the classification tree by removing unimportant variables. This entailed removing the variables strikezone top and bottom, break in the y direction, and starting y position. This increased the number of splits in the classification tree from 4568 to 6886, with an overall accuracy increase from 86.46% to 87.59%. This was done using the same pipeline as outlined within the previous three code chunks. This drastic increase in complexity while hardly increasing accuracy was determined not to be useful. As such, the final classification tree for determining pitch type uses the variables shown in the variable importance graph. The importances of these variables are very interesting to see, with break length, start speed, velocity in the y direction, acceleration in the z direction, and end speed are the five most important variables. Close after this is spin rate, which makes sense as a useful variable for classification based on our prior data analysis. Break angle, another variable we had analyzed previously, was less useful, but useful nonetheless. 
 
 
 ## IV. Conclusions
 
 In this study, we analyzed many variables having to do with pitches in the 2018 MLB pitching dataset. To start, we determined significant differences in spin rate and break rate based on the type of the pitch. We found that all pitches share some characteristics, such as maximum possible break angles per spin rate, but some pitches vary in their other characteristics. For instance, some pitches don’t reach higher spin rates or some pitches don’t have lower break angles at high spin rates. This provided enough information to pursue a classification tree based on spin rate, break angle, and many other possible variables.
+
 Our classification tree was able to determine the type of pitch based on sensor data with 86.46% accuracy. While this tree is arguably complex, having 4568 leaf nodes, there are also over 700,000 data entries and 25 variables being used for classification. This classification tree was also much better at predicting pitch types than simply choosing the most common pitch type, whose accuracy was 35.39%. The resulting variables of importance within the classification tree also were interesting, with break length, start speed, velocity in the y direction, acceleration in the z direction, and end speed being the five most important variables. Figure 7 outlines this very well.
+
 One particular aspect we were interested in was where the ‘elite’ pitchers stand out compared to the rest of their peers. We manually selected 25 starting pitchers, 15 RHP and 10 LHP, based on the 2018 league leaders & all-stars. One thing done to compare elite pitchers to everyone else was filtering pitch type to only the 3 kinds of fastballs (4-seam, 2-seam, and cutter) and calculating average velocity compared to the rest of the dataset, which unsurprisingly ended up higher. 
+
 The conversation around what makes a great MLB pitcher often revolves around the concept of “command”. Having good command over a pitch essentially means that it goes where the pitcher wants it to. In the analysis of pitch locations for all the pitches in the 2018 season, it starts to reveal a general league strategy based on a couple of factors that we analyzed, namely pitch type and dominant hand. These insights allow for a more exact criterion for what it takes for a pitcher to have command over their pitches. Pitchers in the MLB are usually judged by their outcome stats, like the amount of hits or runs they give up, which are dependent on many other factors of the game. But pitch location is almost completely up to the pitcher. So if a pitcher can keep their fastballs in the upper half of the strike zone, and keep sliders away from the middle of the plate, it can give a more quantitative view of their command. 
 
 ## V. Limitations / Recommendations
 
-	One way this study was limited was in time and scope. The dataset used has many more variables and relationships between variables than were used within this study. There are many more things to pursue in this project. For instance, as mentioned in our proposal, “what parts of the zone are the lowest xBA for breaking balls & offspeed pitches?” This was one question we did not have time to address and is a possible future use case. 
-	Another limitation of this project was in terms of computational power. For the classification tree machine learning method, we ended up using half the variables that we had access to. To be fair, there were several variables that wouldn’t have been useful for this step, such as game id, but others would have possibly been useful. With the large amount of data present, it took around 20 to 30 minutes to create a full classification tree. This drastically cut down how extensively we could explore different possible classification trees, as each run would take a significant amount of time. 
+One way this study was limited was in time and scope. The dataset used has many more variables and relationships between variables than were used within this study. There are many more things to pursue in this project. For instance, as mentioned in our proposal, “what parts of the zone are the lowest xBA for breaking balls & offspeed pitches?” This was one question we did not have time to address and is a possible future use case. 
+
+Another limitation of this project was in terms of computational power. For the classification tree machine learning method, we ended up using half the variables that we had access to. To be fair, there were several variables that wouldn’t have been useful for this step, such as game id, but others would have possibly been useful. With the large amount of data present, it took around 20 to 30 minutes to create a full classification tree. This drastically cut down how extensively we could explore different possible classification trees, as each run would take a significant amount of time. 
 
 
 
