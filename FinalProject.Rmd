@@ -85,18 +85,22 @@ write.csv(pitches_2018_full, "data/2018_pitches_full.csv",
 
 
 ```{r spin break}
+# Clean out unused pitch types
 pitches_spin_cleaned <- pitches |>
   mutate(pitch_type = ifelse(pitch_type == "FO","PO", pitch_type)) |>
   filter(!pitch_type %in% c("", "AB","EP","PO"))
 
+# Get summary statistics of the various variables
+summary_stats <- pitches_spin_cleaned |>
+  summarise(across(c(spin_rate, break_angle),
+                   list(mean = mean, sd = sd)))
+
+# remove any data points more than 3 standard deviations from the mean
+threshold <- 3
 pitches_filtered <- pitches_spin_cleaned |>
   filter(
     abs(spin_rate - summary_stats$spin_rate_mean) <= threshold * summary_stats$spin_rate_sd,
-    abs(break_angle - summary_stats$break_angle_mean) <= threshold * summary_stats$break_angle_sd,
-    abs(pfx_x - summary_stats$pfx_x_mean) <= threshold * summary_stats$pfx_x_sd,
-    abs(pfx_z - summary_stats$pfx_z_mean) <= threshold * summary_stats$pfx_z_sd,
-    abs(end_speed - summary_stats$end_speed_mean) <= threshold * summary_stats$end_speed_sd,
-    abs(start_speed - summary_stats$start_speed_mean) <= threshold * summary_stats$start_speed_sd
+    abs(break_angle - summary_stats$break_angle_mean) <= threshold * summary_stats$break_angle_sd
   )
 
 renamed_pitches_clean <- pitches_filtered |>
@@ -124,4 +128,190 @@ ggplot(data = renamed_pitches_clean, mapping = aes(x = spin_rate, y = break_angl
   theme(plot.title = element_text(hjust = 0.5))
 
 ```
+  The above figure has several interesting aspects. To start, every graph shows bounds along the upper and lower sides, with the same cone-shape. This is due to a sort of maximum angle break possible per a given spin rate. Across all pitches, this varies slightly, but every pitch type follows this similar cone shape, indicating a threshold for angle break given a spin rate. To note, the presence of the negative break angle axis comes from left and right handed pitchers, changing how the ball flies through the air. 
+	Past simply spin rate and angle break, the shapes of each pitch type varies, slightly in some cases, and more significantly in other cases. For instance, a Knuckleball will not exceed a spin rate of 2200, based on this dataset. As such, knuckleballs also do not reach higher angle breaks. There are also noteworthy scenarios in the data where at higher spin rates, smaller angle breaks aren’t possible. This occurs for Changeups, Splitters, Sinkers, Two-seam Fastballs, Four-seam Fastballs, and other pitch types, to varying degrees. Really, the higher the spin rate, across most pitch types, the fewer the pitches that have low angle breaks. The only exceptions are the Four-seam Fastball and the Cutter, which both have angle breaks of 0° at spin rates around 2500 rpm. This clearly shows different behaviors of the ball during flight for different pitch types, although there are more differences between some pitch types than others. In conclusion for this data visualization, there are distinct differences in angle break and spin rate mechanics based on the pitch type. To prove this, Code Chunk 2 displays ANOVA tests of spin rate and break angle across pitch types, both of which are statistically significant. This indicates that both the spin rate and break angle of each pitch type is unique.
+
+```{r code chunk 2 anova tests and summary statistics}
+
+anova_spin <- aov(spin_rate ~ pitch_type, data = pitches)
+anova_break <- aov(break_angle ~ pitch_type, data = pitches)
+summary(anova_spin)
+summary(anova_break)
+
+# Need to add more to this, based on comments
+```
+
+
+
+One of the unique aspects of our dataset is the exact coordinates of each pitch as it crosses home plate. We were curious about pitcher strategy when it comes to the locations they aim for. When observing the location of all pitches from the 2018 season, the pitches tend to be most densely clustered around the center of the strike zone. When filtering for the pitchers throwing hand and the batter's stance, the data becomes much more indicative of pitcher strategy. The figures below show the normalized density of pitch location, where the lighter coolers indicate a higher density of pitches at that location. 
+
+```{r first heat map}
+
+
+
+```
+
+
+The data shows that all pitchers generally prefer to throw to the batters outside, no matter which side of the plate the batter lines up on. The pitcher favored matchups, where the pitchers throwing hand is the same as the batter’s stance, have noticeably different distributions compared to the batter favored matchups. In the pitcher favored matchups, the top of the zone has more pitches on the pitcher’s arm side, and at the lower areas of the plate, the pitches tail off to the glove side. 
+
+	We were also curious to see how pitch location is affected by pitch type. 
+
+
+```{r second heat map}
+
+
+
+
+```
+
+The distributions show 4 - seam fastballs as the pitch that generally occupies the top half of the strike zone, and sliders, curveballs, and changeups occupy the lower parts of the zone. The location of sliders is very right biased, which makes sense based on the nature of the pitch. Sliders in the modern MLB usually have a lot of glove-side movement, and many more pitches are thrown by right-handers, which explains why the slider tends to enter the zone on the right half of the plate. I predict that when splitting the data between left-handed and right-handed pitchers, the higher density areas for sliders would be on opposite sides of home plate. 
+
+
+```{r pie chart replacement 1}
+
+
+
+```
+
+We wanted to visualize how batters fared against the 25 ‘elite’ pitchers selected (15 RHP and 10 LHP), who were selected based on 2018 pitching leaderboards and all-star teams. We removed the 13 rarest outcomes for an at-bat, including catcher’s interference, strikeout double play, runner out, among others. However, the pie chart still includes pieces that are barely visible, like triple, sac fly, field error, and hit by pitch which we may end up removing to make it easier for the viewer to interpret. Additionally, we filtered out only the events that are deemed ‘productive’ for the batter, where either they reach base themselves or sacrifice to advance a runner. We can see that elite pitchers limit extra base hits very well, over ¾ of the productive results for a batter is either a walk or a single. This is unsurprising, as teams rely on their aces to pitch lots of innings and they don’t want to be beat on just a single pitch. 
+
+
+```{r pie chart replacement 2}
+
+
+
+```
+
+
+## III. Machine Learning Methods
+
+```{r strikeout model code chunk and graph}
+
+
+
+```
+
+This is a basic regression model where it predicted the probability of a strikeout based on start speed, spin rate, and nasty (a measure of how hard a pitch is to hit from 0-100). The nasty variable tends to follow a normal distribution. For the final, we will make a more complex regression model, potentially based on strikeout probability, called strike vs called ball, or something similar. The graph does not display the data exactly how I intended, it is hard to see the exact proportion of strikeout vs no K. But you can see as the predicted probability of a K rises, particularly above .35 the green bar indicating an actual strikeout is getting closer and closer to the red bar, indicating that the model is at least somewhat useful. 
+
+
+We developed a classification tree to determine the pitch type. To do this, we first removed variables from the data that had to do with the game state. This was because the high number of variables and large amount of data made it take lengthy amounts of time. As such, we decided to reduce the number of columns. First, we removed all Id and Name columns from the data, as these were specific to games, pitchers, and batters. The presence of these as categorical variables of many many types would have made calculation of a classification tree both large and very specific to the batters and pitchers in the dataset. Additionally, things like the game id were simply unnecessary. Code Chunk 3 shows the data cleaning necessary to remove all the columns. Then, we decided to shift the goal of this classification tree to determine the pitch type solely based on data having to do with the sensor data, such as positions, velocities, spin rates, etc. This eliminated even more variables, leaving 25 variables having to do with pitch sensor data.
+
+```{r additional cleaning}
+# Select pitch types and change to factor types
+pitches_filtered <- pitches |>
+  select(-c(pitcher_name, batter_name, pitcher_id, g_id, batter_id, ab_id)) |>
+  filter(!pitch_type %in% c("", "AB","EP","PO", "FO")) |>
+  mutate(code = as.factor(code),
+         type = as.factor(code),
+         zone = as.factor(zone),
+         pitch_type = as.factor(pitch_type),
+         across(where(is.character), as.factor))
+
+# determine which columns to remove
+pitches_filtered |>
+  select(where(is.factor)) |>
+  colnames() ->
+  to_remove
+
+to_remove <- to_remove[to_remove != "pitch_type"]
+
+pitches_filtered2 <- pitches_filtered |>
+  # The following select removes all unnecessary variables (unnecessary having to do with anything but the pitch itself)
+  select(-all_of(to_remove), # This keeps pitch_type, which is needed (Rstudio recommended all_of)
+         -c(inning, p_score, o, outs, on_1b, on_2b, on_3b, outs, 
+            event_num, outs, b_score, b_count, s_count, type_confidence, pitch_num))
+
+```
+
+
+After this was performed, we constructed a classification tree using Rpart. Then, we pruned the tree, determined variables of importance, and calculated the accuracy of the tree. Code Chunk 4 contains all of this and Figure 7 shows the variables of importance. Unfortunately, the tree does have 4567 leaf nodes, which makes the resulting graph far too large to graph. While this seems very large for a classification tree, the unpruned version had 68571 leaf nodes, making the pruned version a fraction of the size.
+
+```{r full classification tree and pruning}
+
+# Build the full decision tree here (This will take a while to do, mine took around 15 minutes)
+pitch_full_tree <- rpart(
+  formula = pitch_type ~ .,   # explanatory and response variables
+  data = pitches_filtered2,
+  method = "class",
+  parms = list(split = "information"), # Using entropy
+  minsplit = 0,
+  minbucket = 0,
+  cp = -1
+)
+
+
+pitch_full_tree$cptable |> 
+  data.frame() |>
+  # finding row with smallest xerror
+  slice_min(xerror, n=1, with_ties = F) |>
+  # create xerror cutoff = xerror + xstd
+  mutate(xerror_cutoff = xerror + xstd) |>
+  # picking xerror_cutoff table
+  pull(xerror_cutoff) ->   # Saves as vector, only give one column
+  xcutoff
+
+# Finding the "best" tree using xcutoff
+pitch_full_tree$cptable |> 
+  data.frame() |>
+  # Keeping all rows below xcutoff
+  filter(xerror < xcutoff) |>      
+  # Get simplest one
+  slice(1)
+
+# Finding the "best" tree using xcutoff
+pitch_full_tree$cptable |> 
+  data.frame() |>
+  # Keeping all rows below xcutoff
+  filter(xerror < xcutoff) |>  
+  # Get simplest one
+  slice(1) |>
+  # Picking cp value out of dataframe 
+  pull(CP) ->
+  cp_prune
+
+c("xerror cutoff" = xcutoff,
+  "cp prune value" = cp_prune)
+
+```
+
+```{r variables of importance}
+
+# This code is taken directly from class, plot importance of variables
+caret::varImp(pitches_pruned) |> 
+  arrange(desc(Overall)) |> 
+  rownames_to_column(var = "variable") |> 
+  
+  ggplot(mapping = aes(x = fct_reorder(variable, -Overall),
+                       y = Overall)) + 
+  
+  geom_col(fill = "steelblue",
+           color = "black") + 
+  
+  labs(x = NULL,
+       y = "Variable Importance",
+       title = "Variable Importance in Pruned Classification Tree for Pitch type data") + 
+  
+  scale_y_continuous(expand = c(0, 0, 0.05, 0)) +
+  
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))
+
+```
+
+```{r prediction and accuracies}
+
+predict(
+  object = pitches_pruned,
+  newdata = pitches_filtered2,
+  type = "class"
+) ->
+  pitches_predicted
+
+# Creating the confusion matrix:
+confusionMatrix(
+  data = pitches_predicted,
+  reference = pitches_filtered2$pitch_type
+)
+
+```
+
 
