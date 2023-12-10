@@ -31,105 +31,205 @@ elite_avg <-
             avgspin = mean(spin_rate, na.rm = TRUE)
             )
 
-event_counts <- elite_pitchers |>
-  group_by(event) |>
-  summarise(count = n()) |>
-  arrange(count)
-event_counts <- event_counts[-(1:13), ] # Removing very rare events
-
-# Convert the counts to a proportion
-event_counts$proportion <- event_counts$count / sum(event_counts$count)
-
-# Visualize all outcomes of at-bats vs Elite Ps
-ggplot(event_counts, mapping = aes(x = "", y = proportion, fill = event)) +
-  geom_bar(stat = "identity", width = 1, color = "black", linewidth = .5) +
-  coord_polar("y", start = 0) +
-  theme_void() +
-  labs(title = 'AB outcomes vs Elite Pitchers', fill = "Event Type")
-```
-
-
-
-``
-```{r Elite Pitch Type}
-pitch_type_counts <- elite_pitchers |>
-  group_by(pitch_type) |>
-  summarise(count = n()) |>
-  arrange(count)
-
-# Remove niche pitches, missing, and pitchouts
-pitch_type_counts <- pitch_type_counts[-(1:3), ]
-
-# Pitch Selection bar graph 
-  ggplot(pitch_type_counts, mapping = aes(x = pitch_type, y = count, fill = pitch_type)) +
-  geom_bar(stat = "identity") +
-  theme_minimal() +
-  labs(x = "Pitch Type", y = "Count", title = "Distribution of Pitch Types among Elite Pitchers")
-
-```
-```{r Velo, Spin Correlation with Strikeouts }
 elite_pitchers <- elite_pitchers %>%
   mutate(is_strikeout = ifelse(event %in% c('Strikeout', 'Strikeout - DP'), 1, 0), is_out = ifelse(event %in% c('Flyout', 'Groundout', 'Forceout', 'Double Play', 'Fielders Choice Out', 'Lineout', 'Pop Out', 'Runner Out'), 1, 0))
 ```
 
 
-```{r Velo, Spin Correlation with Strikeouts }
-# Calculate the correlation between spin rate and strikeout rate
-spin_strikeout_cor <- cor(elite_pitchers$spin_rate, elite_pitchers$is_strikeout, use = "complete.obs")
 
-# Calculate the correlation between velocity and strikeout rate
-velocity_strikeout_cor <- cor(elite_pitchers$start_speed, elite_pitchers$is_strikeout, use = "complete.obs")
+```{r Non Elite vs Elite AB Outcomes }
+non_elite <- pitches %>% 
+    filter(!pitcher_id %in% c(425794, 433587, 446372, 456034, 453286, 434378, 519144, 502042, 425844, 594798, 543606, 543037, 545333, 453562, 605400, 518516, 457918, 461829, 519242, 500779, 605483, 452657, 430935, 572971, 571578))
 
-spin_K_model <- glm(is_strikeout ~ spin_rate, data = elite_pitchers, family = 'binomial')
-summary(strikeout_model)
+elite_event_counts <- elite_pitchers |>
+  group_by(event) |>
+  summarise(count = n()) |>
+  arrange(count) 
 
-velo_K_model <- glm(is_strikeout ~ start_speed, data = elite_pitchers, family = 'binomial')
-summary(velo_K_model)
+elite_event_counts$proportion <- elite_event_counts$count / sum(elite_event_counts$count)
 
-```
+elite_event_counts1 <- elite_event_counts[-(1:19), ] # Removing rarer events
 
-```{r Heat Map}
-# This is pretty ugly, want to use Henry's strike zone
-ggplot(elite_pitchers, aes(x = px, y = pz)) +
-  geom_bin2d(bins = 200) +
-  scale_fill_viridis() +
+nonelite_event_counts <- non_elite |>
+  group_by(event) |>
+  summarise(count = n()) |>
+  arrange(count) 
+
+nonelite_event_counts$proportion <- nonelite_event_counts$count / sum(nonelite_event_counts$count)
+nonelite_event_counts1 <- nonelite_event_counts[-(1:21), ] 
+
+nonelite_avg <- 
+  non_elite |>
+  summarise(avgvelo = mean(start_speed, na.rm = TRUE),
+            avgbreak = mean(break_length, na.rm = TRUE))
+# Add a new column to each dataset to indicate the group
+elite_event_counts1$group <- 'Elite'
+nonelite_event_counts1$group <- 'Non-Elite'
+
+# Use full_join to combine the datasets by event type
+combined_events <- full_join(elite_event_counts1, nonelite_event_counts1, by = "event", suffix = c("_elite", "_nonelite"))
+
+# Calculate the difference in proportions
+combined_events <- combined_events |>
+  mutate(diff = proportion_elite - proportion_nonelite)
+
+# Plot the differential heatmap
+ggplot(combined_events, aes(x = event, y = 1, fill = diff)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient2(low = "red", high = "steelblue", mid = "white", midpoint = 0, limit = c(-0.02, 0.05)) +
+  labs(title = 'Difference in Proportion of AB outcomes (Elite - Non-Elite)', x = "Event Type", y = "", fill = "Difference") +
   theme_minimal() +
-  labs(title = "Density of Pitch Locations", x = "Horizontal Location", y = "Vertical Location")
+  theme(axis.text.x = element_text(angle = 90, hjust = 1),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank())
+# There is a statistically significant difference in K rate between elite vs non-elite pitchers
+# Filter for productive events
+productive_events <- c('Intent Walk', 'Triple', 'Hit By Pitch', 'Sac Bunt', 'Sac Fly', 'Home Run', 'Double', 'Walk', 'Single')
+elite_productive <- elite_event_counts %>%
+  filter(event %in% productive_events)
 
-# Find average velocity for 3 types of fastballs
-elite_pitchers |>
-  filter(pitch_type == 'FF' | pitch_type == 'FT' | pitch_type == 'FC') |>
-  summarise(avg_FFvelo = mean(start_speed, na.rm = TRUE))
+nonelite_productive <- nonelite_event_counts %>%
+  filter(event %in% productive_events)
 
-# Bad graph
-# elite_pitchers |>
-  #filter(pitch_type == 'FF' | pitch_type == 'FT' | pitch_type == 'FC') |>
-  #ggplot(mapping = aes(x = px, y = pz)) +
-  #geom_bin2d(bins = 100) +  
-  #geom_point(color = "red", shape = 1, size = 0.1, alpha = 0.1) +  
-  #theme_minimal() + 
-  #theme(legend.position = "right") +  
-  #labs(title = "Density of Fastball Locations", x = "Horizontal Location", y = "Vertical Location")  
+# Combine the elite and non-elite dataframes
+productive_AB <- bind_rows(
+  mutate(elite_productive, group = 'Elite'),
+  mutate(nonelite_productive, group = 'Non-Elite')
+)
+
+# Plotting the side-by-side bar chart
+ggplot(productive_AB, aes(x = event, y = proportion, fill = group)) +
+  geom_bar(stat = 'identity', position = 'dodge', color = 'black', linewidth = 0.5) +
+  scale_fill_manual(values = c('Elite' = 'blue', 'Non-Elite' = 'red')) +
+  labs(title = 'Proportion of Productive At-Bats: Elite vs Non-Elite Pitchers', x = 'Event Type', y = 'Proportion', fill = 'Group') +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# The most statistically significant is in the walk rate, which further proves the 'Moneyball' theory that OBP% is one of the most important stats and elite pitchers are able to limit free passes.
+```
+```{r Zack Greinke Case Study}
+
+greinke <-
+  elite_pitchers |>
+    filter(pitcher_id == 425844) |>
+    select(px, pz, start_speed, end_speed, spin_rate, spin_dir, break_angle, break_length, ax, ay, az, nasty, zone, code, type, pitch_type, b_count, s_count, outs, pitch_num, on_1b, on_2b, on_3b, event, inning, o, stand, is_strikeout, is_out) 
+
+# Analyzing Greinke's distribution of pitch type
+greinke_pitchtype <- greinke |>
+  group_by(pitch_type) |>
+  summarise(count = n()) 
+
+greinke_pitchtype_dist <- greinke_pitchtype %>%
+  mutate(pitch_type = case_when(
+    pitch_type == "CH" ~ "Changeup",
+    pitch_type == "CU" ~ "Curveball",
+    pitch_type == "EP" ~ "Eephus",
+    pitch_type == "FF" ~ "4-seam fastball",
+    pitch_type == "SL" ~ "Slider",
+    pitch_type == "FT" ~ "2-seam fastball",
+    FALSE ~ as.character(pitch_type)  # Handles any other pitch types not listed
+  ))
+
+# Calculate the total number of pitches
+total_pitches <- sum(greinke_pitchtype$count)
+
+# Calculate the proportion for each pitch type
+greinke_pitchtype_dist |>
+  mutate(proportion = count / total_pitches) |>
+  arrange(desc(count))
+
+# Analyzing Greinke's avg velocity and velocity from early to late innings
+greinke_velo <- greinke |>
+  group_by(pitch_type) |>
+  summarise(average_velocity = mean(start_speed, na.rm = FALSE))
+
+greinke_velo_inning <- greinke |>
+  group_by(inning, pitch_type) |>
+  summarise(average_velocity = mean(start_speed, na.rm = TRUE)) |>
+  ungroup()  # Ungroup for plotting
+
+# Plotting the line chart 
+ggplot(greinke_velo_inning, aes(x = inning, y = average_velocity, color = pitch_type, group = pitch_type)) +
+  geom_line() +
+  scale_color_manual(values = c("CH" = "red", "CU" = "green", "FF" = "blue", "FT" = "purple", "EP" = "orange", "SL" = "pink"),
+                     labels = c("CH" = "Changeup", "CU" = "Curveball", "FF" = "4-seam Fastball", "FT" = "2-seam Fastball", "EP" = "Eephus", "SL" = "Slider")) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    panel.grid.major = element_blank(),
+    axis.text.x = element_text(hjust = 1),
+    legend.title = element_blank()
+  ) +
+  labs(title = "Average Pitch Velocity by Inning", x = 'Inning', y = 'Velocity') +
+  scale_y_continuous(breaks = seq(from = 63,
+                                  to = 93,
+                                  by = 5)) +
+  scale_x_continuous(breaks = 1:max(greinke$inning))  
+
+greinke_pitchtype_dist
+greinke_velo
+
+```{r Greinke Heat Map}
+greinke_pitchlabels <- c("4-Seam Fastball", "Slider", "2-Seam Fastball", "Changeup", "Curveball", 'Eephus')
+# creating dataframe for pitch type sample sizes
+greinke_sample_sizes <-
+  table(greinke$pitch_type) |> 
+  data.frame() |> 
+  filter(
+    Var1 %in% c("FF", "SL", "FT", "CH", "CU", "EP")
+  ) |> 
+  rename("pitch_type" = Var1)
+
+greinke |> 
+  select(pitch_type, code, px, pz) |> 
+  filter(px >= -3 & px <= 3, # removing outlier pitch locations
+         pz >= 0 & pz <= 6,
+         pitch_type %in% c("FF", "SL", "FT", "CH", "CU", "EP")) |> 
+  ggplot(
+    mapping = aes(
+      x = px,
+      y = pz
+    )
+  ) + 
+  geom_density_2d_filled( 
+    mapping = aes(fill = after_stat(level)),
+    contour_var = "ndensity",
+    adjust = .5,
+    alpha = .8,
+    color = "black",
+    linewidth = .1,
+    show.legend = F
+  ) +
+  geom_polygon( # drawing strike zone
+    data = data.frame(
+      x = rep(c(-sz_width/2, sz_width/2), each=2),
+      y = c(sz_offset + sz_height, sz_offset, sz_offset, sz_offset + sz_height)
+    ),
+    mapping = aes(x = x,
+                  y = y),
+    fill = NA,
+    color = "black"
+  ) + 
+  facet_wrap(
+    facets = ~pitch_type,
+    labeller = labeller(pitch_type = c(FF = "4-Seam Fastball", SL = "Slider", FT = "2-Seam Fastball", CH = "Changeup", CU = "Curveball", SI = "Sinker", EP = 'Eephus' ))
+  ) + 
+  geom_text(
+    data = greinke_sample_sizes,
+    mapping = aes(label = paste("N:", Freq)),
+    x = 1.5,
+    y = 4,
+    color = "white",
+    size = 3
+  ) + 
+  coord_equal() + 
+  labs(title = "Zack Greinke: Location Heat Map By Pitch Type",
+       caption = "With average mlb strike zone \nX,Y in feet ",
+       x = NULL,
+       y = NULL) +
+  theme(title = element_text(hjust =.5))
+
+
   
 
 ```
-
-```{r Strikeout Predictive Modeling}
-# Ensuring there are no missing values in the data
-elite_pitchers1 <- elite_pitchers %>%
-  filter(complete.cases(start_speed, spin_rate, nasty, is_strikeout))
-elite_pitchers1$is_strikeout <- factor(elite_pitchers1$is_strikeout, levels = c(0, 1), labels = c("No", "Yes"))
-
-# Logistic regression model for predicting strikeouts, using more variables
-strikeout_model <- glm(is_strikeout ~ start_speed + spin_rate + nasty, data = elite_pitchers1, family = "binomial")
-summary(strikeout_model)
-
-# Visualize the model's predicted probabilities, it doesn't look very good, correlation or aesthetically
-elite_pitchers1$predicted_strikeout <- predict(strikeout_model, type = "response")
-ggplot(elite_pitchers1, aes(x = predicted_strikeout, fill = factor(is_strikeout))) +
-  geom_histogram(binwidth = 0.01, position = 'dodge') +
-  scale_fill_manual(name = "Strikeout", values = c("No" = "red", "Yes" = "green")) +
-  theme_minimal() +
-  labs(title = "Predicted Probability of Strikeouts", x = "Predicted Probability", y = "Count")
-
-
