@@ -331,7 +331,280 @@ confusionMatrix(
 
 ```
 
-Based on these figures, especially the variable importance figure, we decided to try moving forward with reducing complexity of the classification tree by removing unimportant variables. This entailed removing the variables strikezone top and bottom, break in the y direction, and starting y position. This increased the number of splits in the classification tree from 4568 to 6886, with an overall accuracy increase from 86.46% to 87.59%. This was done using the same pipeline as outlined within the previous three code chunks, with the only difference being removing the 4 least important variables from the data. The drastic increase in complexity accompanying this change, while hardly increasing accuracy was determined not to be useful. As such, the final classification tree for determining pitch type uses the variables shown in the variable importance graph. The importances of these variables are very interesting to see, with break length, start speed, velocity in the y direction, acceleration in the z direction, and end speed are the five most important variables. Close after this is spin rate, which makes sense as a useful variable for classification based on our prior data analysis. Break angle, another variable we had analyzed previously, was less useful, but useful nonetheless. 
+Based on these figures, especially the variable importance figure, we decided to try moving forward with reducing the complexity of the classification tree by removing unimportant variables. This entailed removing the variables; strikezone top and bottom, break in the y direction, and starting y position. This increased the number of splits in the classification tree from 4568 to 6886, with an overall accuracy increase from 86.46% to 87.59%. This was done using the same pipeline as outlined within the previous three code chunks, with the only difference being removing the 4 least important variables from the data. The drastic increase in complexity accompanying this change, while hardly increasing accuracy was determined not to be useful. As such, the final classification tree for determining pitch type uses the variables shown in the variable importance graph. The importance of these variables is very interesting to see, with break length, start speed, velocity in the y direction, acceleration in the z direction, and end speed are the five most important variables. Close after this is spin rate, which makes sense as a useful variable for classification based on our prior data analysis. Break angle, another variable we had analyzed previously, was less useful, but useful nonetheless. 
+
+
+
+We then developed a KNN model to determine the result of a given pitch, once again based on sensor data. The possible outcomes included a ball, ball in the dirt, swinging strike, called strike, foul, foul tip, intentional ball, and more. The pipeline for this followed a similar path to before of removing categorical data, except for code and pitch type, and then filtering for a single pitch type, Knuckle Curve This was because running a KNN model on the entire dataset would have taken far too long upwards of 10 minutes. Determining the best choice of K with this in mind would've taken much longer. Because of this, we determined that the Knuckle Curve was a good pitch type to try to predict the outcome of since there were 16327 data entries. This is a pretty decent amount of data, but considering there are 13 levels, with varying levels in each group, the Knuckle curve did a good job of providing enough data points for KNN to work.
+
+```{r pitch types}
+# Show the amounts of each pitch type
+table(pitches$pitch_type)
+
+```
+
+We proceed with data cleaning as discussed.
+
+```{r clean for knn}
+
+# Need to remove batter name and pitcher name, and all ids 
+# also need to filter out bad pitch data
+pitches_filtered_knn <- pitches |>
+  select(-c(pitcher_name, batter_name, pitcher_id, g_id, batter_id, ab_id)) |>
+  filter(!pitch_type %in% c("", "AB","EP","PO", "FO")) |>
+  mutate(code = as.factor(code),
+         type = as.factor(code),
+         zone = as.factor(zone),
+         pitch_type = as.factor(pitch_type),
+         across(where(is.character), as.factor)) |>
+  filter(pitch_type == "KC") 
+
+
+# Remove factor columns (can't have these in KNN)
+pitches_filtered_knn |>
+  select(where(is.factor)) |>
+  colnames() ->
+  to_remove
+
+to_remove <- to_remove[to_remove != "code"]
+  # The following select removes all unnecessary variables (unnecessary having to do with anything but the pitch itself)
+pitches_filtered_knn2 <- pitches_filtered_knn |>
+  select(-all_of(to_remove), # This keeps pitch_type, which is needed (Rstudio recommended all_of)
+         -c(inning, p_score, o, outs, on_1b, on_2b, on_3b, outs, 
+            event_num, outs, b_score, b_count, s_count, type_confidence, pitch_num))
+
+# Make sure correct columns are removed
+tibble(head(pitches_filtered_knn2))
+# unique(pitches_filtered_knn2$code) # Use this to check the codes
+
+```
+
+
+Since KNN needs normalized or standardized data, we need to standardize and normalize the data.
+
+```{r normalize and standardize data}
+# normalize function
+normalize <- 
+  function(x){
+  return((x - min(x))/(max(x) - min(x)))
+}
+
+# Normalizing the cat data:
+knn_norm <- 
+  pitches_filtered_knn2 |> 
+  mutate(across(.cols = where(is.numeric),
+                .fns = normalize))
+
+# Checking that the min is 0 and max is 1 for both columns:
+knn_norm |> 
+  summarize(across(.cols = where(is.numeric),
+                   .fns = list(min = min, 
+                               max = max)))
+
+# standardize function
+standardize <- 
+  function(x){
+    return((x - mean(x))/sd(x))
+  }
+
+# standardizing the cat data:
+knn_stan <- 
+  pitches_filtered_knn2 |> 
+  mutate(across(.cols = where(is.numeric),
+                .fns = standardize))
+
+# Checking that the mean is 0 and the standard deviation is 1 for both columns:
+knn_stan |> 
+  summarize(across(.cols = where(is.numeric),
+                   .fns = list(avg = mean, 
+                               sd = sd))) |> 
+  round(digits = 5)
+
+```
+
+Considering there is still a large amount of data, we will be using partitioning. LOOCV/the holdout method would also work, but would probably take longer to run. Additionally, we randomly sample from the dataset in order to not introduce any form of bias towards the earlier season or later season in 2018.
+
+```{r train test split}
+RNGversion("4.1.0")
+set.seed(2870)
+# Perform train test split to separate the data
+# From https://www.statology.org/train-test-split-r/
+sample <- sample(c(TRUE, FALSE), nrow(pitches_filtered_knn), replace=TRUE, prob=c(0.8,0.2))
+train_stan <- knn_stan[sample, ]
+test_stan <- knn_stan[!sample, ]
+train_norm <- knn_norm[sample, ]
+test_norm <- knn_norm[!sample, ]
+
+
+```
+
+
+Next, we perform a K search, looking for the best accuracy across the standardized and normalized data for several selections of k. We unfortunately cannot test every single possible selection of k, since this would be computationally expensive and we do not have such resources at our disposal. Because of this, a range of ks has been chosen that outlines the maximum accuracy found for k, through the searching of ks from 5 to 500. These won't all be included in the RMD, as a result of the time this would take to do.
+
+```{r knn choosing k}
+RNGversion("4.1.0")
+set.seed(2870)
+
+# It turns out that using all columns for training isn't too long in run time
+knn_cols <- train_norm |> select(where(is.numeric)) |> colnames()
+
+# Data frame for knn accuracy - if the chosen value is 100, may need to increase upper bound
+knn_acc <- 
+  tibble(
+    k = 10:100, # this will take a while but is necessary for the graph below
+    norm_acc = rep(-1, length(k)),
+    stan_acc = rep(-1, length(k))
+  ) 
+
+for (i in 1:nrow(knn_acc)) {
+  # Use normalized data
+  # Fitting knn algorithm for ith iteration of loop
+  loop_norm <- knn(train = train_norm[, knn_cols],
+                  test = test_norm[, knn_cols],
+                  cl = train_norm$code,
+                  k = knn_acc$k[i])
+  
+  # forming confusion matrix for ith iteration of normalized data
+  loop_cm_norm <- confusionMatrix(
+    data = loop_norm, 
+    reference = test_norm$code
+  )
+  
+  # store accuracy
+  knn_acc[i, 2] <- loop_cm_norm$overall[1]
+  
+  # Use standardized data
+  # Fitting knn algorithm for ith iteration of loop
+  loop_stan <- knn(train = train_stan[, knn_cols],
+                  test = test_stan[, knn_cols],
+                  cl = train_stan$code,
+                  k = knn_acc$k[i])
+  
+  # forming confusion matrix for ith iteration of normalized data
+  loop_cm_stan <- confusionMatrix(
+    data = loop_stan, 
+    reference = test_stan$code
+  )
+  
+  # same as confusion matrix
+  knn_acc[i, 3] <- loop_cm_stan$overall[1]
+}
+
+knn_acc
+
+knn_acc |>
+  pivot_longer(cols = -k,
+               names_to = "rescale_method",
+               values_to = "accuracy") |> 
+  slice_max(accuracy)
+
+```
+
+Finally, below is a graph of K with corresponding accuracies. As we can see, for predicting the outcome of pitches in the 2018 MLB data set, 47.71% of pitches are correctly identified using KNN on sensor data. While this accuracy does seem low, there are factors to take into account that we couldn't do so in our data. Each pitcher and batter are different, and the state of the game may have influence on the performance on either of them. As such, this approach of using just sensor data may no be the greatest approach, but KNN also cannot use the categorical data necessary to describe the game state. Because of this, KNN is not the optimal method for determining outcome, but it is still better than nothing, as given by the following code chunk.
+
+```{r best accuracy}
+# Checking the results using resubstitution
+predicted_norm <- knn(train = train_stan[, knn_cols],
+                  test = test_stan[, knn_cols],
+                  cl = train_stan$code,
+                  k = 57)
+
+confusionMatrix(
+    data = predicted_norm, 
+    reference = test_stan$code
+  )
+
+
+```
+
+Even though this is a poor overall accuracy, it is still statistically significant over the no information rate. It is also noteworthy that Classes D, E, H, L, M, and T all have no predictions. This is because these aren't present in the data of knuckleballs, so no predictions can be made using this. Even though this would be nice to be avoided, increasing our data set to the next highest pitch type, FC (Cutter), more than doubles the size of the data that is being predicted. This is a large problem because of run time, as searching for k in the above data already takes upwards of 20 minutes.
+
+This is also taking into account the best possible choice of K, being 57. This means that to determine the outcome of a single point, with 47.71% accuracy, we can determine the outcome of a pitch. This being the case, we can see the accuracies for given ks from 10 to 100 in the following graph.
+
+```{r accuracies per k}
+# Plot k
+knn_acc |> 
+  pivot_longer(cols = -k,
+               names_to = "rescale_method",
+               values_to = "accuracy") |> 
+  ggplot(mapping = aes(x=k, y=accuracy)) +
+  geom_line(mapping = aes(color = rescale_method)) +
+  labs(title = "KNN accuracy over choice Ks",
+       x = "Choice of k",
+       y = "Accuracy")
+  
+```
+
+
+This graph is very interesting since standardized accuracy is much higher than normalized accuracy. It also looks like the accuracy begins to trend upwards with increasing k. This is not the case, as given in the following graph.
+
+```{r knn showing max k}
+RNGversion("4.1.0")
+set.seed(2870)
+
+# It turns out that using all columns for training isn't too long in run time
+knn_cols <- train_norm |> select(where(is.numeric)) |> colnames()
+
+# Data frame for knn accuracy - if the chosen value is 100, may need to increase upper bound
+knn_acc <- 
+  tibble(
+    k = seq(from = 11, to = 411, by = 20), # this will take a while but is necessary for the graph below
+    norm_acc = rep(-1, length(k)),
+    stan_acc = rep(-1, length(k))
+  ) 
+
+for (i in 1:nrow(knn_acc)) {
+  # Use normalized data
+  # Fitting knn algorithm for ith iteration of loop
+  loop_norm <- knn(train = train_norm[, knn_cols],
+                  test = test_norm[, knn_cols],
+                  cl = train_norm$code,
+                  k = knn_acc$k[i])
+  
+  # forming confusion matrix for ith iteration of normalized data
+  loop_cm_norm <- confusionMatrix(
+    data = loop_norm, 
+    reference = test_norm$code
+  )
+  
+  # store accuracy
+  knn_acc[i, 2] <- loop_cm_norm$overall[1]
+  
+  # Use standardized data
+  # Fitting knn algorithm for ith iteration of loop
+  loop_stan <- knn(train = train_stan[, knn_cols],
+                  test = test_stan[, knn_cols],
+                  cl = train_stan$code,
+                  k = knn_acc$k[i])
+  
+  # forming confusion matrix for ith iteration of normalized data
+  loop_cm_stan <- confusionMatrix(
+    data = loop_stan, 
+    reference = test_stan$code
+  )
+  
+  # same as confusion matrix
+  knn_acc[i, 3] <- loop_cm_stan$overall[1]
+}
+
+# Plot k
+knn_acc |> 
+  pivot_longer(cols = -k,
+               names_to = "rescale_method",
+               values_to = "accuracy") |> 
+  ggplot(mapping = aes(x=k, y=accuracy)) +
+  geom_line(mapping = aes(color = rescale_method)) +
+  labs(title = "KNN accuracy over choice Ks",
+       x = "Choice of k",
+       y = "Accuracy")
+
+```
+
+This clearly indicates that we have our maximum choice of k. Increasing k even further past this point quickly runs into run time errors. With the downward trend of accuracy with increasing k with the range in the above graph, we determined that this was sufficient evidence for our choice of k
+
+
+
+
 
 
 ## IV. Conclusions
