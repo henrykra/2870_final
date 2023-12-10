@@ -451,7 +451,7 @@ ggplot(greinke_velo_inning, aes(x = inning, y = average_velocity, color = pitch_
     axis.text.x = element_text(hjust = 1),
     legend.title = element_blank()
   ) +
-  labs(title = "Average Pitch Velocity by Inning", x = 'Inning', y = 'Velocity') +
+  labs(title = "Zack Greinke: Average Pitch Velocity by Inning", x = 'Inning', y = 'Velocity') +
   scale_y_continuous(breaks = seq(from = 63,
                                   to = 93,
                                   by = 5)) +
