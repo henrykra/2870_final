@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE,
                       fig.align = "center",
                       warning = F,
                       message = F)
-pacman::p_load(rpart, rpart.plot, tidyverse, caret)
+pacman::p_load(rpart, rpart.plot, tidyverse, caret, scales)
 
 theme_set(theme_bw())
 ```
@@ -158,9 +158,76 @@ summary(anova_break)
 
 
 
-One of the unique aspects of our dataset is the exact coordinates of each pitch as it crosses home plate. We were curious about pitcher strategy when it comes to the locations they aim for. When observing the location of all pitches from the 2018 season, the pitches tend to be most densely clustered around the center of the strike zone. When filtering for the pitchers throwing hand and the batter's stance, the data becomes much more indicative of pitcher strategy. The figures below show the normalized density of pitch location, where the lighter coolers indicate a higher density of pitches at that location. 
+One of the unique aspects of our dataset is the exact coordinates of each pitch as it crosses home plate. We were curious about pitcher strategy when it comes to the locations they aim for. When observing the location of all pitches from the 2018 season, the pitches tend to be most densely clustered around the center of the strike zone. When filtering for the pitchers throwing hand and the batter's stance, the data becomes much more indicative of pitcher strategy. The figures below show the normalized density of pitch location, where the lighter colors indicate a higher density of pitches at that location. 
 
 ```{r first heat map}
+# saving locations for the average mlb strike zone
+sz_width <- 17/12
+sz_height <- mean(pitches$sz_top, na.rm = T) - mean(pitches$sz_bot, na.rm = T)
+sz_offset <- mean(pitches$sz_bot, na.rm = T)
+
+# finding sample size counts
+sample_sizes <- rbind(
+  c(nrow(filter(pitches, p_throws == "L" & stand == "L")), "L", "L"),
+  c(nrow(filter(pitches, p_throws == "R" & stand == "L")), "R", "L"),
+  c(nrow(filter(pitches, p_throws == "L" & stand == "R")), "L", "R"),
+  c(nrow(filter(pitches, p_throws == "R" & stand == "R")), "R", "R")
+) |> data.frame() |> rename("N" = X1,
+                            "Pitcher" = X2,
+                            "Batter" = X3)
+
+pitches |> 
+  select(stand, p_throws, pitch_type, code, px, pz) |> 
+  filter(px >= -3 & px <= 3, # removing outlier pitch locations
+         pz >= 0 & pz <= 6) |> 
+  rename("Pitcher" = p_throws,
+         "Batter" = stand) |> 
+  ggplot(
+    mapping = aes(
+      x = px,
+      y = pz
+    )
+  ) + 
+  geom_density_2d_filled( # adding normalized density levels
+    mapping = aes(fill = after_stat(level)),
+    contour_var = "ndensity",
+    adjust = .5,
+    alpha = .8,
+    color = "black",
+    linewidth = .1,
+    show.legend = F
+  ) +
+  geom_polygon( # drawing the strike zone
+    data = data.frame(
+      x = rep(c(-sz_width/2, sz_width/2), each=2),
+      y = c(sz_offset + sz_height, sz_offset, sz_offset, sz_offset + sz_height)
+    ),
+    mapping = aes(x = x,
+                  y = y),
+    fill = NA,
+    color = "black"
+  ) + 
+  facet_grid(
+    rows = vars(Batter),
+    cols = vars(Pitcher),
+    labeller = label_both
+  ) + 
+  geom_text(
+    data = sample_sizes,
+    mapping = aes(label = paste("N:", N)),
+    x = 1.6,
+    y = 5,
+    color = "white"
+  ) + 
+  coord_equal() + 
+  labs(
+    x = NULL,
+    y = NULL,
+    title = "Pitch Heatmap by Handedness",
+    caption = "View is from behind home plate"
+  ) +
+  theme_bw() + 
+  theme(plot.title = element_text(hjust = .5))
 
 
 
@@ -173,7 +240,66 @@ We were also curious to see how pitch location is affected by pitch type.
 
 
 ```{r second heat map}
+pitches_labels <- c("4-Seam Fastball", "Slider", "2-Seam Fastball", "Changeup", "Curveball")
+# creating dataframe for pitch type sample sizes
+pitch_sample_sizes <-
+  table(pitches$pitch_type) |> 
+  data.frame() |> 
+  filter(
+    Var1 %in% c("FF", "SL", "FT", "CH", "CU", "SI")
+  ) |> 
+  rename("pitch_type" = Var1)
 
+
+
+pitches |> 
+  select(stand, p_throws, pitch_type, code, px, pz) |> 
+  filter(px >= -3 & px <= 3, # removing outlier pitch locations
+         pz >= 0 & pz <= 6,
+         pitch_type %in% c("FF", "SL", "FT", "CH", "CU", "SI")) |> 
+  ggplot(
+    mapping = aes(
+      x = px,
+      y = pz
+    )
+  ) + 
+  geom_density_2d_filled( # graphing normalized density
+    mapping = aes(fill = after_stat(level)),
+    contour_var = "ndensity",
+    adjust = .5,
+    alpha = .8,
+    color = "black",
+    linewidth = .1,
+    show.legend = F
+  ) +
+  geom_polygon( # drawing strike zone
+    data = data.frame(
+      x = rep(c(-sz_width/2, sz_width/2), each=2),
+      y = c(sz_offset + sz_height, sz_offset, sz_offset, sz_offset + sz_height)
+    ),
+    mapping = aes(x = x,
+                  y = y),
+    fill = NA,
+    color = "black"
+  ) + 
+  facet_wrap(
+    facets = ~pitch_type,
+    labeller = labeller(pitch_type = c(FF = "4-Seam Fastball", SL = "Slider", FT = "2-Seam Fastball", CH = "Changeup", CU = "Curveball", SI = "Sinker"))
+  ) + 
+  geom_text(
+    data = pitch_sample_sizes,
+    mapping = aes(label = paste("N:", Freq)),
+    x = 1.5,
+    y = 5,
+    color = "white",
+    size = 3
+  ) + 
+  coord_equal() + 
+  labs(title = "Location Heat Map By Pitch",
+       caption = "With average mlb strike zone \nX,Y in feet ",
+       x = NULL,
+       y = NULL) +
+  theme(title = element_text(hjust =.5))
 
 
 
