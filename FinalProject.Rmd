@@ -744,8 +744,244 @@ knn_acc |>
 This clearly indicates that we have our maximum choice of k. Increasing k even further past this point quickly runs into run time errors. With the downward trend of accuracy with increasing k with the range in the above graph, we determined that this was sufficient evidence for our choice of k
 
 
+We found our data from a collection of datasets posted on kaggle.com, and in that collection there was a pitches dataset from 2019. We ideally would have liked to use the most recent data for our exploration, but the key setback for this dataset was that it was missing all of the entries for spin rate. Among MLB pitcher analysis, spin rate is a very important stat, that also has controversy surrounding it. Making the baseball spin is what gives a pitch its movement, making it more difficult for the batter to track. For years, MLB pitchers have been trying to find ways to increase the RPM on their pitches, most notebly by using illegal foreign substances on the mound to get a better grip on the ball. With so much emphasis on spin rate in the MLB, we set out to find a way to predict spin rate based on the other sensor information we have on the pitch. To do this, we created a regression tree model, because after analysis we found no real strong linear relationships between spinrate and our explanatory variables, and we would like to use an eager learning method so that we can apply the model to the 2019 data. The key challenge with creating a regression tree with the size of our data would be the training time it would take. So, to adjust for this, we decided to focus on one pitcher from the data, the 2018 National League Cy Young award winner Jacob deGrom. 
+
+```{r spin rate eda}
+# filtering to only pitches thrown by deGrom
+degrom <- pitches |> 
+  filter(pitcher_name == "Jacob deGrom",
+         !is.na(spin_rate))
 
 
+# deciding what factors are completely unrelated to the pitch
+degrom |> 
+  select(
+    -sz_top, -sz_bot, -type_confidence, -y0
+  ) -> degrom
+
+# Keeping data about only the pitch, not the at bat outcome
+degrom |> 
+  select(start_speed:pitch_type, -zone, -break_y) |> 
+  mutate(across(.cols = where(is.character), .fns = factor)) -> degrom
+
+# EDA to see relationships between numeric variables
+degrom |> 
+  relocate(spin_rate) |> 
+  pivot_longer(
+    cols = start_speed:nasty,
+    names_to = "stat",
+    values_to = "measurement"
+  ) |> 
+  ggplot(
+    mapping = aes(x = measurement, y = spin_rate)
+  ) + 
+  geom_point(alpha = .2) + 
+  geom_smooth(
+    method = 'loess',
+    se = F,
+    formula = y~x
+  ) + 
+  facet_wrap(
+    facets = ~stat,
+    scales = "free_x"
+  ) + 
+  labs(
+    title = "Spin rate relationship with numeric sensor data",
+    y = "Spin Rate (RPM)",
+    x = NULL
+  )
+
+```
+In our graphs, we see in many of the measurements clusters of points forming, likely due to the pitch type. Each pitch type has a different direction of spin, so naturally they tend to cluster around different spin rates. Using a regression tree will allow us to make splits in the data based on pitch type so that they are treated differently in the prediction. 
+
+```{r spin rate regression}
+# making the fully formed tree
+spin_rate_full <- 
+  rpart(
+    formula = spin_rate ~ .,
+    data = degrom,
+    method = "anova",
+    minsplit = 2,
+    minbucket = 1,
+    cp = -1
+  )
+
+
+# Finding the xerror cut off
+spin_rate_full$cptable |> 
+  data.frame() |> 
+  slice_min(xerror, n = 1, with_ties = F) |> 
+  mutate(xcutoff = xerror + xstd) |> 
+  pull(xcutoff) -> xcutoff
+
+
+
+
+# Find the cp value to prune the tree at
+spin_rate_full$cptable |> 
+  data.frame() |> 
+  # finding trees with xerror below xcutoff
+  filter(xerror <= xcutoff) |> 
+  slice(1) |> 
+  pull(CP) -> cp_prune
+
+# pruning the tree
+prune(
+  spin_rate_full,
+  cp = cp_prune
+) -> spin_rate_pruned
+
+
+# making predictions
+pred_sr <-
+  predict(object = spin_rate_pruned, 
+          newdata = degrom)
+# merging predicted spin rates with training data
+sr_pred <- 
+  degrom |> 
+  mutate(pred_sr = pred_sr)
+# calculating R2 and rmse
+sr_pred |> 
+  summarize(
+    R2 = cor(spin_rate, pred_sr)^2,
+    rmse = sqrt(sum((spin_rate - pred_sr)^2)/(n() - 1))
+  )
+
+## plotting prediction residuals
+
+ggplot(
+  data = sr_pred,
+  mapping = aes(
+    x = pred_sr,
+    y = (spin_rate - pred_sr)
+  )
+) + 
+  geom_point() + 
+  geom_hline(
+    yintercept = 0,
+    color = "red",
+    linetype = "dashed",
+    linewidth = 1
+  ) + 
+  labs(
+    x = "Predicted Spin Rate",
+    y = "Residual"
+  )
+
+```
+
+As you can see from the graph, R^2 and rmse values, the regression tree fits very well for deGrom. The tree makes predicts spin rates that cluster very tightly around the line y=x, so there is little error when dealing with pitches thrown by deGrom. But, as I mentioned earlier, the 2019 data is misssing spin rate measurements for all pitches thrown, and we don't know if this model trained from deGrom's pitches will fit nearly as well with data from other pitchers. The code chunk below will test this model on pitches thrown by another elite pitcher, 2018 AL Cy Young winner Blake Snell, as well as a random subset from the data. 
+
+```{r spin rate comparison snell}
+# creating dataset for Blake Snell
+snell <- pitches |> 
+  filter(pitcher_name == "Blake Snell",
+         !is.na(spin_rate))
+
+snell |> 
+  select(
+    -sz_top, -sz_bot, -type_confidence, -y0
+  ) -> snell
+snell |> 
+  select(start_speed:pitch_type) |> 
+  mutate(across(.cols = where(is.character), .fns = factor)) -> snell
+
+
+# making predictions
+snell_pred_sr <-
+  predict(object = spin_rate_pruned, 
+          newdata = snell)
+# merging predicted spin rates with training data
+snell_sr_pred <- 
+  snell |> 
+  mutate(pred_sr = snell_pred_sr)
+# calculating R2 and rmse
+snell_sr_pred |> 
+  summarize(
+    R2 = cor(spin_rate, pred_sr)^2,
+    rmse = sqrt(sum((spin_rate - pred_sr)^2)/(n() - 1))
+  )
+
+## plotting predictions
+
+ggplot(
+  data = snell_sr_pred,
+  mapping = aes(
+    x = pred_sr,
+    y = (spin_rate - pred_sr)
+  )
+) + 
+  geom_point() + 
+  geom_hline(
+    yintercept = 0,
+    color = "red",
+    linetype = "dashed",
+    linewidth = 1
+  ) + 
+  labs(
+    x = "Predicted Spin Rate",
+    y = "Residual"
+  )
+
+```
+```{r random spin rate comparison}
+
+
+
+# creating a random subset
+random_pitchers <- pitches |> 
+  slice_sample(n = nrow(degrom)) |> 
+  filter(code %in% unique(degrom$code),
+         pitch_type %in% unique(degrom$pitch_type))
+
+random_pitchers |> 
+  select(
+    -sz_top, -sz_bot, -type_confidence, -y0
+  ) -> random_pitchers
+random_pitchers |> 
+  select(start_speed:pitch_type) |> 
+  mutate(across(.cols = where(is.character), .fns = factor)) -> random_pitchers
+
+
+# making predictions
+random_pred_sr <-
+  predict(object = spin_rate_pruned, 
+          newdata = random_pitchers)
+# merging predicted spin rates with training data
+random_sr_pred <- 
+  random_pitchers |> 
+  mutate(pred_sr = random_pred_sr)
+# calculating R2 and rmse
+random_sr_pred |> 
+  summarize(
+    R2 = cor(spin_rate, pred_sr)^2,
+    rmse = sqrt(sum((spin_rate - pred_sr)^2)/(n() - 1))
+  )
+
+## plotting predictions
+
+ggplot(
+  data = random_sr_pred,
+  mapping = aes(
+    x = pred_sr,
+    y = (spin_rate - pred_sr)
+  )
+) + 
+  geom_point() + 
+  geom_hline(
+    yintercept = 0,
+    color = "red",
+    linetype = "dashed",
+    linewidth = 1
+  ) + 
+  labs(
+    x = "Predicted Spin Rate",
+    y = "Residual"
+  )
+
+
+```
+As you can see from the outputs for both Blake Snell and a random subset of the data, the model based on deGrom's pitches is much worse when applied to the rest of the MLB, but the predictions still don't differ by a great amount. The deGrom model tends to under predict spin rate, which is the opposite of what I would have expected considering the success deGrom had on the mound in 2018. It is clear that our model is biased, and making a more complex model trained with a larger portion of the data may lead to a model that does better for other pitchers. 
 
 
 ## IV. Conclusions
@@ -757,6 +993,8 @@ Our classification tree was able to determine the type of pitch based on sensor 
 One particular aspect we were interested in was where the ‘elite’ pitchers stand out compared to the rest of their peers. We manually selected 25 starting pitchers, 15 RHP and 10 LHP, based on the 2018 league leaders & all-stars. One thing done to compare elite pitchers to everyone else was filtering pitch type to only the 3 kinds of fastballs (4-seam, 2-seam, and cutter) and calculating average velocity compared to the rest of the dataset, which unsurprisingly ended up higher. 
 
 The conversation around what makes a great MLB pitcher often revolves around the concept of “command”. Having good command over a pitch essentially means that it goes where the pitcher wants it to. In the analysis of pitch locations for all the pitches in the 2018 season, it starts to reveal a general league strategy based on a couple of factors that we analyzed, namely pitch type and dominant hand. These insights allow for a more exact criterion for what it takes for a pitcher to have command over their pitches. Pitchers in the MLB are usually judged by their outcome stats, like the amount of hits or runs they give up, which are dependent on many other factors of the game. But pitch location is almost completely up to the pitcher. So if a pitcher can keep their fastballs in the upper half of the strike zone, and keep sliders away from the middle of the plate, it can give a more quantitative view of their command. 
+Spin rate is also an important variable in the search for the best pitchers. Our regression model for predicting spin rate showed that we could accurately train a model built to predict spin rates for only one pitcher, but applying that model to other samples showed the model's weakness. What was especially interesting in our output was how the model tended to under predict spin rates. The model was trained on arguably the best pitcher in the majors from that year, but it still showed that deGrom did not rely on simply having the highest spin rates. The model shows the nuance in what makes a pitcher great, and that looking at purely sensor data about a pitch can never give a full picture about that pitchers impact on winning. 
+
 
 ## V. Limitations / Recommendations
 
