@@ -517,7 +517,13 @@ confusionMatrix(
 
 ```
 
-Even though this is a poor overall accuracy, it is still statistically significant over the no information rate. It is also noteworthy that Classes D, E, H, L, M, and T all have no predictions. This is because these aren't present in the data of knuckleballs, so no predictions can be made using this. Even though this would be nice to be avoided, increasing our data set to the next highest pitch type, FC (Cutter), more than doubles the size of the data that is being predicted. This is a large problem because of run time, as searching for k in the above data already takes upwards of 20 minutes.
+Even though this is a poor overall accuracy, it is still statistically significant over the no information rate. It is also noteworthy that Classes D, E, H, L, M, and T all have no predictions. This is because these are present in low quantities in the data, so KNN struggles to predict those codes. This comes from the fact that the data is all very interspersed with different classes, making it harder to predict smaller quantity classes. The following code chunk displays this. Even though this would be nice to be avoided, increasing our data set to the next highest pitch type, FC (Cutter), more than doubles the size of the data that is being predicted on. This is a large problem because of run time, as searching for k in the above data already takes upwards of 20 minutes.
+
+```{r see codes}
+# View the codes of KC
+table(pitches_filtered_knn$code)
+```
+
 
 This is also taking into account the best possible choice of K, being 57. This means that to determine the outcome of a single point, with 47.71% accuracy, we can determine the outcome of a pitch. This being the case, we can see the accuracies for given ks from 10 to 100 in the following graph.
 
