@@ -78,6 +78,7 @@ This project focused on analyzing MLB pitch data from 2018. This data was genera
 # write.csv(pitches_2018_full, "data/2018_pitches_full.csv",
 #           row.names = F,
 #           quote = F)
+
 pitches <- read.csv("2018_pitches_full.csv")
 
 
@@ -537,7 +538,11 @@ knn_acc |>
   geom_line(mapping = aes(color = rescale_method)) +
   labs(title = "KNN accuracy over choice Ks",
        x = "Choice of k",
-       y = "Accuracy")
+       y = "Accuracy",
+       color = "Rescale Method") +
+  scale_color_manual(values = c("norm_acc" = "darkorange", "stan_acc" = "steelblue"),
+                     labels = c("norm_acc" = "Normalize", "stan_acc" = "Standardized")) +
+  theme(plot.title = element_text(hjust = 0.5))
   
 ```
 
@@ -602,7 +607,11 @@ knn_acc |>
   geom_line(mapping = aes(color = rescale_method)) +
   labs(title = "KNN accuracy over choice Ks",
        x = "Choice of k",
-       y = "Accuracy")
+       y = "Accuracy",
+       color = "Rescale Method") +
+  scale_color_manual(values = c("norm_acc" = "darkorange", "stan_acc" = "steelblue"),
+                     labels = c("norm_acc" = "Normalize", "stan_acc" = "Standardized")) +
+  theme(plot.title = element_text(hjust = 0.5))
 
 ```
 
@@ -628,7 +637,3 @@ The conversation around what makes a great MLB pitcher often revolves around the
 One way this study was limited was in time and scope. The dataset used has many more variables and relationships between variables than were used within this study. There are many more things to pursue in this project. For instance, as mentioned in our proposal, “what parts of the zone are the lowest xBA for breaking balls & offspeed pitches?” This was one question we did not have time to address and is a possible future use case. 
 
 Another limitation of this project was in terms of computational power. For the classification tree machine learning method, we ended up using half the variables that we had access to. To be fair, there were several variables that wouldn’t have been useful for this step, such as game id, but others would have possibly been useful. With the large amount of data present, it took around 20 to 30 minutes to create a full classification tree. This drastically cut down how extensively we could explore different possible classification trees, as each run would take a significant amount of time. 
-
-
-
-
