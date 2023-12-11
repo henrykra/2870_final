@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE,
                       fig.align = "center",
                       warning = F,
                       message = F)
-pacman::p_load(rpart, rpart.plot, tidyverse, caret, scales)
+pacman::p_load(rpart, rpart.plot, tidyverse, caret, scales, GGally, broom, class) 
 
 theme_set(theme_bw())
 ```
@@ -355,7 +355,7 @@ nonelite_event_counts <- non_elite |>
   arrange(count) 
 
 nonelite_event_counts$proportion <- nonelite_event_counts$count / sum(nonelite_event_counts$count)
-nonelite_event_counts1 <- nonelilite_event_counts[-(1:21), ] # Non elite data includes two outcomes not present in elite set
+nonelite_event_counts1 <- nonelite_event_counts[-(1:21), ] # Non elite data includes two outcomes not present in elite set
 
 # Add a new column to each dataset to indicate the group
 elite_event_counts1$group <- 'Elite'
@@ -657,7 +657,7 @@ Based on these figures, especially the variable importance figure, we decided to
 
 
 
-We then developed a KNN model to determine the result of a given pitch, once again based on sensor data. The possible outcomes included a ball, ball in the dirt, swinging strike, called strike, foul, foul tip, intentional ball, and more. The pipeline for this followed a similar path to before of removing categorical data, except for code and pitch type, and then filtering for a single pitch type, Knuckle Curve This was because running a KNN model on the entire dataset would have taken far too long upwards of 10 minutes. Determining the best choice of K with this in mind would've taken much longer. Because of this, we determined that the Knuckle Curve was a good pitch type to try to predict the outcome of since there were 16327 data entries. This is a pretty decent amount of data, but considering there are 13 levels, with varying levels in each group, the Knuckle curve did a good job of providing enough data points for KNN to work.
+We then developed a KNN model to determine the result of a given pitch, once again based on sensor data. The possible outcomes included a ball, ball in the dirt, swinging strike, called strike, foul, foul tip, intentional ball, and more. The pipeline for this followed a similar path to before of removing categorical data, except for code and pitch type, and then filtering for a single pitch type, Knuckle Curve This was because running a KNN model on the entire dataset would have taken far too long. Determining the best choice of K with this in mind would've taken much longer. Because of this, we determined that the Knuckle Curve was a good pitch type to try to predict the outcome of since there were 16327 data entries. This is a pretty decent amount of data, but considering there are 13 levels, with varying levels in each group, the Knuckle curve did a good job of providing enough data points for KNN to work.
 
 ```{r pitch types}
 # Show the amounts of each pitch type
@@ -936,7 +936,7 @@ knn_acc |>
 
 ```
 
-This indicates that we have our maximum choice of k. Increasing k even further past this point quickly runs into run time errors. With the downward trend of accuracy with increasing k with the range in the above graph, we determined that this was sufficient evidence for our choice of k
+This clearly indicates that we have our maximum choice of k. Increasing k even further past this point quickly runs into run time errors. With the downward trend of accuracy with increasing k with the range in the above graph, we determined that this was sufficient evidence for our choice of k
 
 
 We found our data from a collection of datasets posted on kaggle.com, and in that collection there was a pitches dataset from 2019. We ideally would have liked to use the most recent data for our exploration, but the key setback for this dataset was that it was missing all of the entries for spin rate. Among MLB pitcher analysis, spin rate is a very important stat, that also has controversy surrounding it. Making the baseball spin is what gives a pitch its movement, making it more difficult for the batter to track. For years, MLB pitchers have been trying to find ways to increase the RPM on their pitches, most notebly by using illegal foreign substances on the mound to get a better grip on the ball. With so much emphasis on spin rate in the MLB, we set out to find a way to predict spin rate based on the other sensor information we have on the pitch. To do this, we created a regression tree model, because after analysis we found no real strong linear relationships between spinrate and our explanatory variables, and we would like to use an eager learning method so that we can apply the model to the 2019 data. The key challenge with creating a regression tree with the size of our data would be the training time it would take. So, to adjust for this, we decided to focus on one pitcher from the data, the 2018 National League Cy Young award winner Jacob deGrom. 
