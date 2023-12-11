@@ -1065,7 +1065,7 @@ ggplot(
 
 ```
 
-As you can see from the graph, R^2 and rmse values, the regression tree fits very well for deGrom. The tree makes predicts spin rates that cluster very tightly around the line y=x, so there is little error when dealing with pitches thrown by deGrom. But, as I mentioned earlier, the 2019 data is misssing spin rate measurements for all pitches thrown, and we don't know if this model trained from deGrom's pitches will fit nearly as well with data from other pitchers. The code chunk below will test this model on pitches thrown by another elite pitcher, 2018 AL Cy Young winner Blake Snell, as well as a random subset from the data. 
+As you can see from the graph, R^2 and rmse values, the regression tree fits very well for deGrom. The points on the regression plot stay near to zero, so there is little error when dealing with pitches thrown by deGrom. But, as I mentioned earlier, the 2019 data is misssing spin rate measurements for all pitches thrown, and we don't know if this model trained from deGrom's pitches will fit nearly as well with data from other pitchers. The code chunk below will test this model on pitches thrown by another elite pitcher, 2018 AL Cy Young winner Blake Snell, as well as a random subset from the data. 
 
 ```{r spin rate comparison snell}
 # creating dataset for Blake Snell
